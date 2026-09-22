@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // Reemplazá con la URL real de tu Web Service en Render
-const RENDER_API_URL = "https://tu-app-en-render.onrender.com/api/categorias";
+const RENDER_API_URL = "https://totemcart-be.onrender.com/api/categorias";
 
 type CategoriaResponse = {
   status: 'success' | 'error';
