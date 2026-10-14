@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ConfirmationDialog } from './ConfirmationDialog'
 import { useUsers } from '../hooks/useUsers'
 import type { User, UserCreatePayload, UserRole, UserUpdatePayload } from '../types/user'
 
@@ -8,6 +9,11 @@ type UserFormState = {
   nombre: string
   role: UserRole
 }
+
+type UserConfirmation =
+  | { kind: 'create'; payload: UserCreatePayload; label: string }
+  | { kind: 'update'; userId: number; payload: UserUpdatePayload; label: string }
+  | { kind: 'delete'; userId: number; label: string }
 
 const emptyForm: UserFormState = {
   username: '',
@@ -23,6 +29,7 @@ export function UserManager({ token }: { token?: string | null }) {
   const [formError, setFormError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [pendingAction, setPendingAction] = useState(false)
+  const [confirmation, setConfirmation] = useState<UserConfirmation | null>(null)
 
   const totalUsers = useMemo(() => users.length, [users])
 
@@ -30,37 +37,23 @@ export function UserManager({ token }: { token?: string | null }) {
     event.preventDefault()
     setFormError('')
     setSuccessMessage('')
-    setPendingAction(true)
+    const payload: UserCreatePayload = {
+      username: form.username.trim(),
+      password: form.password,
+      nombre: form.nombre.trim(),
+      role: form.role,
+    }
 
-    try {
-      const payload: UserCreatePayload = {
-        username: form.username.trim(),
-        password: form.password,
-        nombre: form.nombre.trim(),
-        role: form.role,
+    if (editingId !== null) {
+      const updatePayload: UserUpdatePayload = {
+        ...(payload.username ? { username: payload.username } : {}),
+        ...(payload.nombre ? { nombre: payload.nombre } : {}),
+        ...(payload.role ? { role: payload.role } : {}),
+        ...(payload.password ? { password: payload.password } : {}),
       }
-
-      if (editingId !== null) {
-        const updatePayload: UserUpdatePayload = {
-          ...(payload.username ? { username: payload.username } : {}),
-          ...(payload.nombre ? { nombre: payload.nombre } : {}),
-          ...(payload.role ? { role: payload.role } : {}),
-          ...(payload.password ? { password: payload.password } : {}),
-        }
-
-        await updateUser(editingId, updatePayload)
-        setSuccessMessage('Usuario actualizado correctamente.')
-      } else {
-        await createUser(payload)
-        setSuccessMessage('Usuario creado correctamente.')
-      }
-
-      setForm(emptyForm)
-      setEditingId(null)
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'No se pudo guardar el usuario.')
-    } finally {
-      setPendingAction(false)
+      setConfirmation({ kind: 'update', userId: editingId, payload: updatePayload, label: payload.nombre })
+    } else {
+      setConfirmation({ kind: 'create', payload, label: payload.nombre })
     }
   }
 
@@ -76,24 +69,55 @@ export function UserManager({ token }: { token?: string | null }) {
     setSuccessMessage('')
   }
 
-  const handleDelete = async (userId: number) => {
+  const handleDelete = (user: User) => {
     setFormError('')
     setSuccessMessage('')
+    setConfirmation({ kind: 'delete', userId: user.id, label: user.nombre })
+  }
 
+  const confirmAction = async () => {
+    if (!confirmation) return
+    setPendingAction(true)
     try {
-      await deleteUser(userId)
-      setSuccessMessage('Usuario eliminado correctamente.')
-      if (editingId === userId) {
-        setEditingId(null)
-        setForm(emptyForm)
+      if (confirmation.kind === 'create') {
+        await createUser(confirmation.payload)
+        setSuccessMessage('Usuario creado correctamente.')
+      } else if (confirmation.kind === 'update') {
+        await updateUser(confirmation.userId, confirmation.payload)
+        setSuccessMessage('Usuario actualizado correctamente.')
+      } else {
+        await deleteUser(confirmation.userId)
+        setSuccessMessage('Usuario eliminado correctamente.')
       }
+      if (confirmation.kind !== 'delete' || editingId === confirmation.userId) {
+        setForm(emptyForm)
+        setEditingId(null)
+      }
+      setConfirmation(null)
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'No se pudo eliminar el usuario.')
+      setFormError(err instanceof Error ? err.message : 'No se pudo completar la acción.')
+      setConfirmation(null)
+    } finally {
+      setPendingAction(false)
     }
   }
 
   return (
     <div className="admin-card user-form-card">
+      {confirmation ? (
+        <ConfirmationDialog
+          message={confirmation.kind === 'delete'
+            ? `¿Seguro que quieres eliminar a "${confirmation.label}"? Esta acción no se puede deshacer.`
+            : confirmation.kind === 'update'
+              ? `¿Confirmas los cambios para "${confirmation.label}"?`
+              : `¿Confirmas la creación del usuario "${confirmation.label}"?`}
+          confirmLabel={confirmation.kind === 'delete' ? 'Eliminar' : confirmation.kind === 'update' ? 'Guardar cambios' : 'Crear usuario'}
+          destructive={confirmation.kind === 'delete'}
+          busy={pendingAction}
+          onConfirm={() => void confirmAction()}
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
       <h2>{editingId !== null ? 'Editar usuario' : 'Crear usuario'}</h2>
 
       <form onSubmit={handleSubmit} className="login-form">
@@ -192,7 +216,7 @@ export function UserManager({ token }: { token?: string | null }) {
                 <button type="button" className="secondary-button" onClick={() => handleEdit(user)}>
                   Editar
                 </button>
-                <button type="button" className="danger-button" onClick={() => handleDelete(user.id)}>
+                <button type="button" className="danger-button" onClick={() => handleDelete(user)}>
                   Eliminar
                 </button>
               </div>
