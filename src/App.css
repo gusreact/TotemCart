@@ -368,6 +368,11 @@
   min-height: calc(100vh - 76px);
   grid-template-columns: 250px minmax(0, 1fr);
   margin: 0 auto;
+  transition: grid-template-columns 180ms ease;
+}
+
+.admin-layout.navigation-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 .admin-navigation {
@@ -380,6 +385,34 @@
   padding: 30px 16px;
   border-right: 1px solid #dfe5df;
   background: #f9faf8;
+}
+
+.navigation-toggle {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px solid #dfe5df;
+  border-radius: 7px;
+  background: #fff;
+  color: #536159;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.navigation-toggle:hover {
+  background: #edf1ed;
+  color: #1c2926;
+}
+
+.navigation-toggle svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
 .nav-caption {
@@ -407,6 +440,18 @@
   transition: background 140ms ease, color 140ms ease;
 }
 
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-nav-item:hover {
   background: #edf1ed;
   color: #1c2926;
@@ -426,6 +471,25 @@
 
 .admin-nav-item.is-active .nav-index {
   color: #39735b;
+}
+
+.navigation-collapsed .admin-navigation {
+  align-items: center;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.navigation-collapsed .navigation-toggle,
+.navigation-collapsed .admin-nav-item {
+  width: 46px;
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.navigation-collapsed .navigation-toggle-label,
+.navigation-collapsed .nav-label {
+  display: none;
 }
 
 .admin-content {
@@ -469,11 +533,21 @@
 .catalog-columns {
   display: grid;
   max-width: 1400px;
-  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 24px;
   margin: 0 auto;
   animation: section-enter 280ms ease both;
+}
+
+.user-management-layout .user-directory {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.user-management-layout .user-editor {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .catalog-list,
@@ -564,6 +638,53 @@
   border-bottom: 0;
 }
 
+.material-disclosure {
+  max-width: 100%;
+  font-size: 0.76rem;
+  text-align: right;
+}
+
+.recipe-table-actions {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.table-actions-primary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.recipe-material-detail-row td {
+  padding: 10px 18px 16px;
+  background: #f8faf8;
+}
+
+.recipe-material-inline-list {
+  display: flex;
+  max-width: 520px;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recipe-material-inline-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: #526158;
+  font-size: 0.8rem;
+}
+
+.recipe-material-inline-list li span:last-child {
+  color: #74817a;
+  white-space: nowrap;
+}
+
 .table-actions {
   display: flex;
   align-items: center;
@@ -591,6 +712,22 @@
   color: #a33c36;
 }
 
+.user-role {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #edf1ed;
+  color: #536159;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.user-role-admin {
+  background: #e3eee7;
+  color: #174d3c;
+}
+
 .catalog-state {
   margin: 0;
   padding: 24px 4px;
@@ -605,7 +742,7 @@
 .recipe-material-layout {
   display: grid;
   max-width: 1400px;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 24px;
   margin: 0 auto;
@@ -719,6 +856,71 @@
   border: 1px solid #e1e8e2;
   border-radius: 5px;
   background: #f8faf8;
+}
+
+.recipe-material-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid #e1e8e2;
+  border-radius: 5px;
+  background: #f8faf8;
+}
+
+.recipe-material-editor > h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  color: #25372e;
+  font-size: 0.85rem;
+}
+
+.recipe-material-editor > h3 span {
+  color: #74817a;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.recipe-material-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recipe-material-edit-list li {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid #e8eee9;
+}
+
+.recipe-material-edit-list li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.recipe-material-edit-list strong {
+  color: #35443c;
+  font-size: 0.8rem;
+}
+
+.recipe-material-edit-list small {
+  color: #74817a;
+  font-size: 0.74rem;
+}
+
+.recipe-material-edit-list .empty-state {
+  min-height: auto;
+  color: #74817a;
+  font-size: 0.8rem;
 }
 
 .recipe-material-draft h3 {
@@ -1003,6 +1205,10 @@
     display: block;
   }
 
+  .admin-layout.navigation-collapsed {
+    display: block;
+  }
+
   .admin-navigation {
     position: sticky;
     top: 76px;
@@ -1015,6 +1221,26 @@
     border-right: 0;
     border-bottom: 1px solid #dfe5df;
     scrollbar-width: thin;
+  }
+
+  .navigation-toggle {
+    display: none;
+  }
+
+  .navigation-collapsed .admin-navigation {
+    align-items: center;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .navigation-collapsed .admin-nav-item {
+    width: auto;
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+
+  .navigation-collapsed .nav-label {
+    display: inline;
   }
 
   .nav-caption {
@@ -1040,6 +1266,22 @@
 
   .catalog-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .catalog-section-heading {
+    display: none;
+  }
+
+  .user-management-layout .user-directory {
+    grid-column: 1;
+    grid-row: 1;
+    order: -2;
+  }
+
+  .user-management-layout .user-editor {
+    grid-column: 1;
+    grid-row: 2;
+    order: -1;
   }
 
   .recipe-material-layout {
@@ -1169,5 +1411,9 @@
 
   .catalog-table {
     min-width: 520px;
+  }
+
+  .recipe-material-inline-list {
+    min-width: 240px;
   }
 }

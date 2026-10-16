@@ -23,7 +23,7 @@ const emptyForm: UserFormState = {
 }
 
 export function UserManager({ token }: { token?: string | null }) {
-  const { users, loading, error, createUser, updateUser, deleteUser } = useUsers(token)
+  const { users, loading, error, reload, createUser, updateUser, deleteUser } = useUsers(token)
   const [form, setForm] = useState<UserFormState>(emptyForm)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formError, setFormError] = useState('')
@@ -103,7 +103,7 @@ export function UserManager({ token }: { token?: string | null }) {
   }
 
   return (
-    <div className="admin-card user-form-card">
+    <div className="catalog-columns user-management-layout">
       {confirmation ? (
         <ConfirmationDialog
           message={confirmation.kind === 'delete'
@@ -118,9 +118,11 @@ export function UserManager({ token }: { token?: string | null }) {
           onCancel={() => setConfirmation(null)}
         />
       ) : null}
-      <h2>{editingId !== null ? 'Editar usuario' : 'Crear usuario'}</h2>
-
-      <form onSubmit={handleSubmit} className="login-form">
+      <section className="catalog-form user-editor">
+        <div className="catalog-form-heading">
+          <h2>{editingId !== null ? 'Editar usuario' : 'Crear usuario'}</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="resource-form">
         <label>
           <span>Username</span>
           <input
@@ -168,7 +170,7 @@ export function UserManager({ token }: { token?: string | null }) {
         {formError ? <p className="error-message">{formError}</p> : null}
         {successMessage ? <p className="success-message">{successMessage}</p> : null}
 
-        <div className="form-actions">
+        <div className="resource-form-actions">
           <button type="submit" disabled={pendingAction || loading}>
             {pendingAction ? 'Guardando...' : editingId !== null ? 'Actualizar usuario' : 'Crear usuario'}
           </button>
@@ -188,42 +190,44 @@ export function UserManager({ token }: { token?: string | null }) {
             </button>
           ) : null}
         </div>
-      </form>
+        </form>
+      </section>
 
-      <div className="users-list-container">
-        <div className="users-list-header">
-          <h3>Usuarios</h3>
-          <span>{totalUsers}</span>
+      <section className="catalog-list user-directory" aria-label="Listado de usuarios">
+        <div className="catalog-list-heading">
+          <div><h2>Usuarios</h2><span>{totalUsers} usuarios</span></div>
+          <button className="icon-action" type="button" onClick={() => void reload()} aria-label="Actualizar usuarios" title="Actualizar">↻</button>
         </div>
 
         {error ? <p className="error-message">{error}</p> : null}
 
-        {users.length === 0 && !loading ? (
-          <p className="empty-state">No hay usuarios registrados.</p>
-        ) : null}
-
-        <ul className="users-list">
-          {users.map((user) => (
-            <li key={user.id} className="user-row">
-              <div>
-                <strong>{user.nombre}</strong>
-                <small>
-                  {user.username} · {user.role}
-                </small>
-              </div>
-
-              <div className="user-row-actions">
-                <button type="button" className="secondary-button" onClick={() => handleEdit(user)}>
-                  Editar
-                </button>
-                <button type="button" className="danger-button" onClick={() => handleDelete(user)}>
-                  Eliminar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+        {loading ? <p className="catalog-state">Cargando usuarios...</p> : users.length === 0 ? (
+          <p className="catalog-state">No hay usuarios registrados.</p>
+        ) : (
+          <div className="catalog-table-wrap">
+            <table className="catalog-table">
+              <thead>
+                <tr><th>Nombre</th><th>Username</th><th>Rol</th><th><span className="sr-only">Acciones</span></th></tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.nombre}</td>
+                    <td>{user.username}</td>
+                    <td><span className={`user-role user-role-${user.role}`}>{user.role}</span></td>
+                    <td>
+                      <div className="table-actions">
+                        <button type="button" className="text-action" onClick={() => handleEdit(user)}>Editar</button>
+                        <button type="button" className="text-action delete-action" onClick={() => handleDelete(user)}>Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
