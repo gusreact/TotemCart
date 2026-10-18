@@ -4,7 +4,7 @@ export async function apiRequest(path: string, token: string | null | undefined,
   const response = await fetch(`${apiBase}${path}`, {
     ...options,
     headers: {
-      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
