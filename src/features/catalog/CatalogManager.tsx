@@ -12,7 +12,15 @@ import {
   type Row,
 } from './catalogModel'
 
-export function CatalogManager({ section, token }: { section: CatalogResource; token?: string | null }) {
+export function CatalogManager({
+  section,
+  token,
+  onMaterialsChange,
+}: {
+  section: CatalogResource
+  token?: string | null
+  onMaterialsChange?: (rows: Row[]) => void
+}) {
   const [rows, setRows] = useState<Row[]>([])
   const [categories, setCategories] = useState<Row[]>([])
   const [recipes, setRecipes] = useState<Row[]>([])
@@ -48,7 +56,9 @@ export function CatalogManager({ section, token }: { section: CatalogResource; t
         apiRequest(endpoint, token),
         section === 'recetas' ? apiRequest('/api/receta-ingredientes', token) : Promise.resolve(null),
       ])
-      setRows(unwrapRows(payload))
+      const nextRows = unwrapRows(payload)
+      setRows(nextRows)
+      if (section === 'materias-primas') onMaterialsChange?.(nextRows)
       if (section === 'recetas') setRecipeMaterials(unwrapRows(recipeMaterialPayload) as unknown as RecipeWithMaterials[])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los registros.')
@@ -72,7 +82,9 @@ export function CatalogManager({ section, token }: { section: CatalogResource; t
           section === 'materias-primas' ? apiRequest('/api/unidades-medida', token) : Promise.resolve(null),
         ])
         if (!active) return
-        setRows(unwrapRows(payload))
+        const nextRows = unwrapRows(payload)
+        setRows(nextRows)
+        if (section === 'materias-primas') onMaterialsChange?.(nextRows)
         setCategories(unwrapRows(categoryPayload))
         setRecipes(unwrapRows(recipePayload))
         setIngredients(unwrapRows(ingredientPayload))
@@ -86,7 +98,7 @@ export function CatalogManager({ section, token }: { section: CatalogResource; t
     }
     void load()
     return () => { active = false }
-  }, [endpoint, section, token])
+  }, [endpoint, onMaterialsChange, section, token])
 
   const fields = fieldDefinitions[section].map((field) => {
     if (field.name === 'categoria_id') {
@@ -421,7 +433,7 @@ export function CatalogManager({ section, token }: { section: CatalogResource; t
                     />
                   </>
                 ) : (
-                  <input type={field.kind} min={field.kind === 'number' ? '0' : undefined} step={field.name === 'precio' || field.name === 'stock' ? '0.01' : '1'} value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))} />
+                  <input type={field.kind} min={field.kind === 'number' ? '0' : undefined} step={field.name === 'precio' || field.name === 'stock' || field.name === 'stock_min' ? '0.01' : '1'} value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))} />
                 )}</>}
               </label>
             ))}

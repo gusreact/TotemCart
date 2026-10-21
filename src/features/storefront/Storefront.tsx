@@ -25,6 +25,27 @@ type StoreRecipe = {
   instrucciones_en?: string | null
 }
 type CartQuantities = Record<number, number>
+const CART_STORAGE_KEY = 'totemcart-checkout-cart'
+
+function readStoredCart(): CartQuantities {
+  const storedCart = sessionStorage.getItem(CART_STORAGE_KEY)
+  if (!storedCart) return {}
+
+  try {
+    const parsed: unknown = JSON.parse(storedCart)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const quantities: CartQuantities = {}
+    for (const [productId, quantity] of Object.entries(parsed)) {
+      const id = Number(productId)
+      if (Number.isInteger(id) && id > 0 && typeof quantity === 'number' && Number.isInteger(quantity) && quantity > 0) {
+        quantities[id] = quantity
+      }
+    }
+    return quantities
+  } catch {
+    return {}
+  }
+}
 
 const copy = {
   es: {
@@ -52,6 +73,9 @@ const copy = {
     emptyCart: 'Todavía no agregaste productos.',
     total: 'Total',
     closeCart: 'Cerrar carrito',
+    checkout: 'Pagar con Mercado Pago',
+    startingCheckout: 'Conectando con Mercado Pago…',
+    checkoutError: 'No pudimos iniciar el pago. Inténtalo de nuevo.',
   },
   en: {
     kicker: 'Good food, made simple',
@@ -78,6 +102,9 @@ const copy = {
     emptyCart: 'You have not added any products yet.',
     total: 'Total',
     closeCart: 'Close cart',
+    checkout: 'Pay with Mercado Pago',
+    startingCheckout: 'Connecting to Mercado Pago…',
+    checkoutError: 'We could not start checkout. Please try again.',
   },
 } as const
 
@@ -103,8 +130,10 @@ export default function Storefront() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [flippedProductIds, setFlippedProductIds] = useState<number[]>([])
-  const [cartQuantities, setCartQuantities] = useState<CartQuantities>({})
+  const [cartQuantities, setCartQuantities] = useState<CartQuantities>(readStoredCart)
   const [cartOpen, setCartOpen] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
+  const [checkingOut, setCheckingOut] = useState(false)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
 
   const loadMenu = async () => {
@@ -152,6 +181,45 @@ export default function Storefront() {
   const cartProducts = products.filter((product) => (cartQuantities[product.id] ?? 0) > 0)
   const cartCount = Object.values(cartQuantities).reduce((total, quantity) => total + quantity, 0)
   const cartTotal = cartProducts.reduce((total, product) => total + Number(product.precio) * cartQuantities[product.id], 0)
+
+  useEffect(() => {
+    if (Object.keys(cartQuantities).length === 0) {
+      sessionStorage.removeItem(CART_STORAGE_KEY)
+    } else {
+      sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartQuantities))
+    }
+  }, [cartQuantities])
+
+  const startCheckout = async () => {
+    if (checkingOut || cartProducts.length === 0) return
+    setCheckingOut(true)
+    setCheckoutError('')
+    try {
+      const response: unknown = await apiRequest('/api/payments/checkout', null, {
+        method: 'POST',
+        body: JSON.stringify({
+          items: cartProducts.map((product) => ({
+            product_id: product.id,
+            quantity: cartQuantities[product.id],
+          })),
+        }),
+      })
+      const checkoutUrl = response && typeof response === 'object' && 'checkout_url' in response
+        ? response.checkout_url
+        : undefined
+      if (typeof checkoutUrl !== 'string' || !checkoutUrl) {
+        throw new Error('El servidor no devolvió la URL de Checkout Pro.')
+      }
+      const parsedCheckoutUrl = new URL(checkoutUrl)
+      if (parsedCheckoutUrl.protocol !== 'https:') {
+        throw new Error('El servidor devolvió una URL de pago no segura.')
+      }
+      window.location.assign(parsedCheckoutUrl.toString())
+    } catch (checkoutRequestError) {
+      setCheckoutError(checkoutRequestError instanceof Error ? checkoutRequestError.message : text.checkoutError)
+      setCheckingOut(false)
+    }
+  }
 
   const animateCartAddition = (source: HTMLButtonElement) => {
     const cartTarget = cartButtonRef.current
@@ -206,9 +274,10 @@ export default function Storefront() {
     setFlippedProductIds([])
   }
 
-  const formatPrice = (price: number) => new Intl.NumberFormat(language === 'es' ? 'es-ES' : 'en-US', {
+  const formatPrice = (price: number) => new Intl.NumberFormat('es-ES', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'ARS',
+    currencyDisplay: 'narrowSymbol'
   }).format(price)
 
   return (
@@ -347,7 +416,7 @@ export default function Storefront() {
           </button>
           {cartOpen ? (
             <div className="cart-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setCartOpen(false) }}>
-              <section className="cart-dialog" role="dialog" aria-modal="true" aria-labelledby="cart-dialog-title">
+              <section className="cart-dialog" role="dialog" aria-modal="true" aria-labelledby="cart-dialog-title" aria-busy={checkingOut}>
                 <header className="cart-dialog-header">
                   <div><p className="storefront-kicker">{text.cart}</p><h2 id="cart-dialog-title">{text.cartTitle}</h2></div>
                   <button type="button" className="cart-close-button" onClick={() => setCartOpen(false)} aria-label={text.closeCart}>×</button>
@@ -362,15 +431,19 @@ export default function Storefront() {
                             {product.imagen_url ? <img src={product.imagen_url} alt="" /> : <span className="cart-item-placeholder" aria-hidden="true">TC</span>}
                             <div className="cart-item-details"><strong>{productName}</strong><span>{formatPrice(Number(product.precio))}</span></div>
                             <div className="cart-item-controls" aria-label={`${text.cart}: ${productName}`}>
-                              <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} onClick={() => changeCartQuantity(product, -1)}>−</button>
+                              <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} onClick={() => changeCartQuantity(product, -1)} disabled={checkingOut}>−</button>
                               <span aria-live="polite">{cartQuantities[product.id]}</span>
-                              <button type="button" className="quantity-control quantity-add" aria-label={`${text.addToCart}: ${productName}`} onClick={(event) => changeCartQuantity(product, 1, event.currentTarget)}>+</button>
+                              <button type="button" className="quantity-control quantity-add" aria-label={`${text.addToCart}: ${productName}`} onClick={(event) => changeCartQuantity(product, 1, event.currentTarget)} disabled={checkingOut}>+</button>
                             </div>
                           </li>
                         )
                       })}
                     </ul>
                     <footer className="cart-summary"><span>{text.total}</span><strong>{formatPrice(cartTotal)}</strong></footer>
+                    {checkoutError ? <p className="checkout-error" role="alert">{checkoutError}</p> : null}
+                    <button type="button" className="checkout-button" onClick={() => void startCheckout()} disabled={checkingOut}>
+                      {checkingOut ? text.startingCheckout : text.checkout}
+                    </button>
                   </>
                 ) : <p className="cart-empty">{text.emptyCart}</p>}
               </section>

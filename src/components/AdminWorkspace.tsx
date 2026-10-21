@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { CatalogManager } from '../features/catalog/CatalogManager'
-import { sections, type AdminSection } from '../features/catalog/catalogModel'
+import { sections, type AdminSection, type Row } from '../features/catalog/catalogModel'
+import { apiRequest, unwrapRows, valueOf } from '../services/apiClient'
 import { UserManager } from './UserManager'
 
 type AdminWorkspaceProps = {
@@ -13,6 +14,30 @@ type AdminWorkspaceProps = {
 export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<AdminSection>('categorias')
   const [navigationCollapsed, setNavigationCollapsed] = useState(false)
+  const [lowStockMaterials, setLowStockMaterials] = useState<Row[]>([])
+  const [inventoryError, setInventoryError] = useState('')
+  const [lowStockDialogOpen, setLowStockDialogOpen] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const loadMaterials = async () => {
+      try {
+        const payload = await apiRequest('/api/materias-primas', token)
+        if (!active) return
+        setLowStockMaterials(getLowStockMaterials(unwrapRows(payload)))
+        setInventoryError('')
+      } catch (err) {
+        if (active) setInventoryError(err instanceof Error ? err.message : 'No se pudo verificar el stock de materias primas.')
+      }
+    }
+    void loadMaterials()
+    return () => { active = false }
+  }, [token])
+
+  const updateMaterials = useCallback((rows: Row[]) => {
+    setLowStockMaterials(getLowStockMaterials(rows))
+    setInventoryError('')
+  }, [])
 
   return (
     <main className="admin-workspace">
@@ -22,10 +47,28 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
           <span>TotemCart <small>ADMIN</small></span>
         </a>
         <div className="admin-account">
+          {lowStockMaterials.length > 0 ? (
+            <button
+              type="button"
+              className="low-stock-alert-button"
+              onClick={() => setLowStockDialogOpen(true)}
+              aria-label={`Ver ${lowStockMaterials.length} materias primas con stock bajo`}
+              aria-haspopup="dialog"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v5M12 8h.01" />
+              </svg>
+            </button>
+          ) : null}
+          {inventoryError ? <span className="inventory-check-error" role="alert">No se pudo verificar el stock: {inventoryError}</span> : null}
           <div className="account-copy"><strong>{nombre}</strong><span>{username}</span></div>
           <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button>
         </div>
       </header>
+      {lowStockDialogOpen && lowStockMaterials.length > 0 ? (
+        <LowStockDialog materials={lowStockMaterials} onClose={() => setLowStockDialogOpen(false)} />
+      ) : null}
 
       <div className={`admin-layout${navigationCollapsed ? ' navigation-collapsed' : ''}`}>
         <nav className="admin-navigation" aria-label="Secciones de administración">
@@ -68,11 +111,69 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
               <UserManager token={token} />
             </>
           ) : (
-            <CatalogManager key={activeSection} section={activeSection} token={token} />
+            <CatalogManager
+              key={activeSection}
+              section={activeSection}
+              token={token}
+              onMaterialsChange={activeSection === 'materias-primas' ? updateMaterials : undefined}
+            />
           )}
         </section>
       </div>
     </main>
+  )
+}
+
+function getLowStockMaterials(rows: Row[]) {
+  return rows.filter((row) => {
+    if (row.stock === null || row.stock === undefined || row.stock === '' ||
+      row.stock_min === null || row.stock_min === undefined || row.stock_min === '') return false
+    const stock = Number(row.stock)
+    const minimumStock = Number(row.stock_min)
+    return Number.isFinite(stock) && Number.isFinite(minimumStock) && minimumStock > stock
+  })
+}
+
+function LowStockDialog({ materials, onClose }: { materials: Row[]; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    dialog?.showModal()
+    return () => {
+      if (dialog?.open) dialog.close()
+    }
+  }, [])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="low-stock-dialog"
+      aria-labelledby="low-stock-dialog-title"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) onClose()
+      }}
+    >
+      <header className="low-stock-dialog-header">
+        <div><p className="eyebrow">Inventario</p><h2 id="low-stock-dialog-title">Materias primas con stock bajo</h2></div>
+        <button type="button" className="low-stock-dialog-close" onClick={onClose} aria-label="Cerrar">×</button>
+      </header>
+      <ul className="low-stock-list">
+        {materials.map((material) => (
+          <li key={String(material.id)}>
+            <strong>{valueOf(material, 'nombre')}</strong>
+            <span>
+              Stock: {valueOf(material, 'stock')} / Mínimo: {valueOf(material, 'stock_min')}
+              {material.unidad_medida ? ` ${String(material.unidad_medida)}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </dialog>
   )
 }
 

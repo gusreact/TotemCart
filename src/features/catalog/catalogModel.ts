@@ -71,6 +71,7 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
     { name: 'nombre', label: 'Nombre', kind: 'text', required: true },
     { name: 'unidad_medida_id', label: 'Unidad de medida', kind: 'select', required: true },
     { name: 'stock', label: 'Stock', kind: 'number', required: true },
+    { name: 'stock_min', label: 'Stock mínimo', kind: 'number' },
   ],
   'unidades-medida': [
     { name: 'medida_es', label: 'Medida en español', kind: 'text', required: true },
@@ -99,6 +100,7 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
     { name: 'nombre', label: 'Materia prima' },
     { name: 'unidad_medida_id', label: 'Unidad de medida' },
     { name: 'stock', label: 'Stock' },
+    { name: 'stock_min', label: 'Stock mínimo' },
   ],
   'unidades-medida': [
     { name: 'medida_es', label: 'Medida en español' },
