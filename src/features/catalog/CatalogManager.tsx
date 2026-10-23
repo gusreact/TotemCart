@@ -152,9 +152,12 @@ export function CatalogManager({
     }
     setDraftMaterials((current) => [...current, {
       id: Number(material.id),
-      nombre: String(material.nombre ?? material.id),
+      nombre_es: typeof material.nombre_es === 'string' ? material.nombre_es : undefined,
+      nombre_en: typeof material.nombre_en === 'string' ? material.nombre_en : undefined,
+      nombre: String(material.nombre_es ?? material.nombre_en ?? material.nombre ?? material.id),
       unidad_medida: String(material.unidad_medida ?? ''),
       cantidad: String(parsedQuantity),
+      requerido: true,
     }])
     setSelectedMaterialId('')
     setMaterialQuantity('1')
@@ -175,7 +178,11 @@ export function CatalogManager({
     ])))
     if (section === 'recetas') {
       const grouped = recipeMaterials.find((recipe) => recipe.receta_id === Number(row.id))
-      setDraftMaterials(grouped?.materias_primas.map((material) => ({ ...material, cantidad: String(material.cantidad) })) ?? [])
+      setDraftMaterials(grouped?.materias_primas.map((material) => ({
+        ...material,
+        cantidad: String(material.cantidad),
+        requerido: material.requerido !== false,
+      })) ?? [])
       setSelectedMaterialId('')
       setMaterialQuantity('1')
     }
@@ -228,7 +235,11 @@ export function CatalogManager({
         rowId: editing?.id,
         label: String(draft.nombre_es ?? draft.nombre ?? draft.nombre_en ?? title.toLowerCase()),
         ...(section === 'recetas' ? {
-          recipeMaterials: draftMaterials.map((material) => ({ id: material.id, cantidad: Number(material.cantidad) })),
+          recipeMaterials: draftMaterials.map((material) => ({
+            id: material.id,
+            cantidad: Number(material.cantidad),
+            requerido: material.requerido,
+          })),
         } : {}),
       })
     } catch (err) {
@@ -377,8 +388,8 @@ export function CatalogManager({
                               <ul className="recipe-material-inline-list">
                                 {recipeMaterialsForRow.map((material) => (
                                   <li key={material.id}>
-                                    <span>{material.nombre}</span>
-                                    <span>{valueOf({ cantidad: material.cantidad }, 'cantidad')} {material.unidad_medida}</span>
+                                    <span>{String(material.nombre_es ?? material.nombre ?? material.nombre_en ?? material.id)}</span>
+                                    <span>{valueOf({ cantidad: material.cantidad }, 'cantidad')} {material.unidad_medida} · {material.requerido === false ? 'Opcional' : 'Requerido'}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -446,6 +457,9 @@ export function CatalogManager({
                 onMaterialChange={setSelectedMaterialId}
                 onQuantityChange={setMaterialQuantity}
                 onAdd={addRecipeMaterial}
+                onRequiredChange={(id, requerido) => setDraftMaterials((current) => current.map((material) => (
+                  material.id === id ? { ...material, requerido } : material
+                )))}
                 onRemove={(id) => setDraftMaterials((current) => current.filter((item) => item.id !== id))}
               />
             ) : null}
@@ -470,6 +484,7 @@ function RecipeMaterialsEditor({
   onMaterialChange,
   onQuantityChange,
   onAdd,
+  onRequiredChange,
   onRemove,
 }: {
   materials: Row[]
@@ -479,6 +494,7 @@ function RecipeMaterialsEditor({
   onMaterialChange: (value: string) => void
   onQuantityChange: (value: string) => void
   onAdd: () => void
+  onRequiredChange: (id: number, requerido: boolean) => void
   onRemove: (id: number) => void
 }) {
   return (
@@ -489,7 +505,7 @@ function RecipeMaterialsEditor({
           <span>Materia prima</span>
           <select value={selectedMaterialId} onChange={(event) => onMaterialChange(event.target.value)}>
             <option value="">Selecciona una materia prima</option>
-            {materials.map((material) => <option key={String(material.id)} value={String(material.id)}>{String(material.nombre ?? material.id)} ({String(material.unidad_medida ?? '')})</option>)}
+            {materials.map((material) => <option key={String(material.id)} value={String(material.id)}>{String(material.nombre_es ?? material.nombre_en ?? material.nombre ?? material.id)} ({String(material.unidad_medida ?? '')})</option>)}
           </select>
         </label>
         <label>
@@ -501,8 +517,18 @@ function RecipeMaterialsEditor({
       <ul className="recipe-material-edit-list">
         {draft.map((material) => (
           <li key={material.id}>
-            <div><strong>{material.nombre}</strong><small>{material.cantidad} {material.unidad_medida}</small></div>
-            <button type="button" className="remove-material-button" onClick={() => onRemove(material.id)} aria-label={`Quitar ${material.nombre}`} title={`Quitar ${material.nombre}`}>×</button>
+            <div><strong>{material.nombre_es ?? material.nombre ?? material.nombre_en ?? material.id}</strong><small>{material.cantidad} {material.unidad_medida}</small></div>
+            <div className="recipe-material-actions">
+              <label className="recipe-material-required">
+                <input
+                  type="checkbox"
+                  checked={material.requerido}
+                  onChange={(event) => onRequiredChange(material.id, event.target.checked)}
+                />
+                <span>Requerido</span>
+              </label>
+              <button type="button" className="remove-material-button" onClick={() => onRemove(material.id)} aria-label={`Quitar ${material.nombre_es ?? material.nombre ?? material.nombre_en ?? material.id}`} title={`Quitar ${material.nombre_es ?? material.nombre ?? material.nombre_en ?? material.id}`}>×</button>
+            </div>
           </li>
         ))}
         {draft.length === 0 ? <li className="empty-state">Sin materias primas seleccionadas.</li> : null}

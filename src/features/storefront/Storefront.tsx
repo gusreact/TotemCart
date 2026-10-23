@@ -24,26 +24,48 @@ type StoreRecipe = {
   instrucciones_es?: string | null
   instrucciones_en?: string | null
 }
-type CartQuantities = Record<number, number>
+type RecipeIngredient = {
+  id: number
+  nombre_es?: string
+  nombre_en?: string
+  nombre?: string
+  unidad_medida?: string
+  cantidad: string | number
+  requerido?: boolean
+}
+type RecipeIngredients = {
+  receta_id: number
+  materias_primas: RecipeIngredient[]
+}
+type CartLine = {
+  product_id: number
+  quantity: number
+  materia_prima_ids: number[]
+}
 const CART_STORAGE_KEY = 'totemcart-checkout-cart'
 
-function readStoredCart(): CartQuantities {
+function readStoredCart(): CartLine[] {
   const storedCart = sessionStorage.getItem(CART_STORAGE_KEY)
-  if (!storedCart) return {}
+  if (!storedCart) return []
 
   try {
     const parsed: unknown = JSON.parse(storedCart)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    const quantities: CartQuantities = {}
-    for (const [productId, quantity] of Object.entries(parsed)) {
-      const id = Number(productId)
-      if (Number.isInteger(id) && id > 0 && typeof quantity === 'number' && Number.isInteger(quantity) && quantity > 0) {
-        quantities[id] = quantity
-      }
-    }
-    return quantities
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((line): line is CartLine => (
+      Boolean(line) &&
+      typeof line === 'object' &&
+      Number.isInteger(line.product_id) &&
+      line.product_id > 0 &&
+      Number.isInteger(line.quantity) &&
+      line.quantity > 0 &&
+      Array.isArray(line.materia_prima_ids) &&
+      line.materia_prima_ids.every((id: unknown) => Number.isInteger(id) && Number(id) > 0)
+    )).map((line) => ({
+      ...line,
+      materia_prima_ids: [...new Set(line.materia_prima_ids)].sort((a, b) => a - b),
+    }))
   } catch {
-    return {}
+    return []
   }
 }
 
@@ -73,6 +95,12 @@ const copy = {
     emptyCart: 'Todavía no agregaste productos.',
     total: 'Total',
     closeCart: 'Cerrar carrito',
+    customTitle: 'Personaliza tu pedido',
+    customDescription: 'Elige qué ingredientes opcionales incluir.',
+    required: 'Requerido',
+    optional: 'Opcional',
+    addConfigured: 'Agregar al carrito',
+    cancel: 'Cancelar',
     checkout: 'Pagar con Mercado Pago',
     startingCheckout: 'Conectando con Mercado Pago…',
     checkoutError: 'No pudimos iniciar el pago. Inténtalo de nuevo.',
@@ -102,6 +130,12 @@ const copy = {
     emptyCart: 'You have not added any products yet.',
     total: 'Total',
     closeCart: 'Close cart',
+    customTitle: 'Customize your order',
+    customDescription: 'Choose which optional ingredients to include.',
+    required: 'Required',
+    optional: 'Optional',
+    addConfigured: 'Add to cart',
+    cancel: 'Cancel',
     checkout: 'Pay with Mercado Pago',
     startingCheckout: 'Connecting to Mercado Pago…',
     checkoutError: 'We could not start checkout. Please try again.',
@@ -109,15 +143,17 @@ const copy = {
 } as const
 
 async function fetchStorefrontData() {
-  const [categoryData, productData, recipeData] = await Promise.all([
+  const [categoryData, productData, recipeData, recipeIngredientData] = await Promise.all([
     apiRequest('/api/categorias', null),
     apiRequest('/api/productos', null),
     apiRequest('/api/recetas', null),
+    apiRequest('/api/receta-ingredientes', null),
   ])
   return {
     categories: unwrapRows(categoryData) as StoreCategory[],
     products: unwrapRows(productData) as StoreProduct[],
     recipes: unwrapRows(recipeData) as StoreRecipe[],
+    recipeIngredients: unwrapRows(recipeIngredientData) as RecipeIngredients[],
   }
 }
 
@@ -127,13 +163,17 @@ export default function Storefront() {
   const [categories, setCategories] = useState<StoreCategory[]>([])
   const [products, setProducts] = useState<StoreProduct[]>([])
   const [recipes, setRecipes] = useState<StoreRecipe[]>([])
+  const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredients[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [flippedProductIds, setFlippedProductIds] = useState<number[]>([])
-  const [cartQuantities, setCartQuantities] = useState<CartQuantities>(readStoredCart)
+  const [cartLines, setCartLines] = useState<CartLine[]>(readStoredCart)
   const [cartOpen, setCartOpen] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
+  const [customizingProduct, setCustomizingProduct] = useState<StoreProduct | null>(null)
+  const [selectedMateriaPrimaIds, setSelectedMateriaPrimaIds] = useState<number[]>([])
+  const customizationSourceRef = useRef<HTMLButtonElement | null>(null)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
 
   const loadMenu = async () => {
@@ -144,6 +184,7 @@ export default function Storefront() {
       setCategories(data.categories)
       setProducts(data.products)
       setRecipes(data.recipes)
+      setRecipeIngredients(data.recipeIngredients)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Menu request failed.')
     } finally {
@@ -160,6 +201,7 @@ export default function Storefront() {
         setCategories(data.categories)
         setProducts(data.products)
         setRecipes(data.recipes)
+        setRecipeIngredients(data.recipeIngredients)
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Menu request failed.')
       } finally {
@@ -178,29 +220,35 @@ export default function Storefront() {
   const categoryProducts = selectedCategory
     ? availableProducts.filter((product) => product.categoria_id === selectedCategory.id)
     : []
-  const cartProducts = products.filter((product) => (cartQuantities[product.id] ?? 0) > 0)
-  const cartCount = Object.values(cartQuantities).reduce((total, quantity) => total + quantity, 0)
-  const cartTotal = cartProducts.reduce((total, product) => total + Number(product.precio) * cartQuantities[product.id], 0)
+  const cartCount = cartLines.reduce((total, line) => total + line.quantity, 0)
+  const cartTotal = cartLines.reduce((total, line) => {
+    const product = products.find((item) => item.id === line.product_id)
+    return total + (product ? Number(product.precio) * line.quantity : 0)
+  }, 0)
+  const customizingIngredients = customizingProduct?.receta_id
+    ? recipeIngredients.find((recipe) => recipe.receta_id === customizingProduct.receta_id)?.materias_primas ?? []
+    : []
 
   useEffect(() => {
-    if (Object.keys(cartQuantities).length === 0) {
+    if (cartLines.length === 0) {
       sessionStorage.removeItem(CART_STORAGE_KEY)
     } else {
-      sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartQuantities))
+      sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartLines))
     }
-  }, [cartQuantities])
+  }, [cartLines])
 
   const startCheckout = async () => {
-    if (checkingOut || cartProducts.length === 0) return
+    if (checkingOut || cartLines.length === 0) return
     setCheckingOut(true)
     setCheckoutError('')
     try {
       const response: unknown = await apiRequest('/api/payments/checkout', null, {
         method: 'POST',
         body: JSON.stringify({
-          items: cartProducts.map((product) => ({
-            product_id: product.id,
-            quantity: cartQuantities[product.id],
+          items: cartLines.map((line) => ({
+            product_id: line.product_id,
+            quantity: line.quantity,
+            materia_prima_ids: line.materia_prima_ids,
           })),
         }),
       })
@@ -247,16 +295,70 @@ export default function Storefront() {
     animation.onfinish = () => flight.remove()
   }
 
-  const changeCartQuantity = (product: StoreProduct, change: number, source?: HTMLButtonElement) => {
-    if (change > 0 && source) animateCartAddition(source)
-    setCartQuantities((current) => {
-      const quantity = Math.max(0, (current[product.id] ?? 0) + change)
-      if (quantity === 0) {
-        return Object.fromEntries(Object.entries(current).filter(([id]) => Number(id) !== product.id))
+  const addConfiguredProduct = (product: StoreProduct, materiaPrimaIds: number[], source?: HTMLButtonElement) => {
+    if (source) animateCartAddition(source)
+    const sortedMateriaPrimaIds = [...new Set(materiaPrimaIds)].sort((a, b) => a - b)
+    setCartLines((current) => {
+      const matchingLine = current.find((line) => (
+        line.product_id === product.id &&
+        line.materia_prima_ids.length === sortedMateriaPrimaIds.length &&
+        line.materia_prima_ids.every((id, index) => id === sortedMateriaPrimaIds[index])
+      ))
+      if (matchingLine) {
+        return current.map((line) => line === matchingLine ? { ...line, quantity: line.quantity + 1 } : line)
       }
-      return { ...current, [product.id]: quantity }
+      return [...current, { product_id: product.id, quantity: 1, materia_prima_ids: sortedMateriaPrimaIds }]
     })
   }
+
+  const beginAddProduct = (product: StoreProduct, source: HTMLButtonElement) => {
+    const materials = product.receta_id
+      ? recipeIngredients.find((recipe) => recipe.receta_id === product.receta_id)?.materias_primas ?? []
+      : []
+    const optionalMaterials = materials.filter((material) => material.requerido === false)
+    if (optionalMaterials.length > 0) {
+      customizationSourceRef.current = source
+      setCustomizingProduct(product)
+      setSelectedMateriaPrimaIds(materials.map((material) => material.id))
+      return
+    }
+    addConfiguredProduct(product, materials.map((material) => material.id), source)
+  }
+
+  const confirmProductCustomization = () => {
+    if (!customizingProduct) return
+    addConfiguredProduct(customizingProduct, selectedMateriaPrimaIds, customizationSourceRef.current ?? undefined)
+    setCustomizingProduct(null)
+    setSelectedMateriaPrimaIds([])
+    customizationSourceRef.current = null
+  }
+
+  const cancelProductCustomization = () => {
+    setCustomizingProduct(null)
+    setSelectedMateriaPrimaIds([])
+    customizationSourceRef.current = null
+  }
+
+  const changeCartLineQuantity = (line: CartLine, change: number) => {
+    setCartLines((current) => current.flatMap((currentLine) => {
+      if (currentLine !== line) return [currentLine]
+      const quantity = currentLine.quantity + change
+      return quantity > 0 ? [{ ...currentLine, quantity }] : []
+    }))
+  }
+
+  const removeLastProductFromCart = (productId: number) => {
+    const lastMatchingLine = [...cartLines].reverse().find((line) => line.product_id === productId)
+    if (lastMatchingLine) changeCartLineQuantity(lastMatchingLine, -1)
+  }
+
+  const productQuantityInCart = (productId: number) => cartLines
+    .filter((line) => line.product_id === productId)
+    .reduce((total, line) => total + line.quantity, 0)
+
+  const ingredientName = (ingredient: RecipeIngredient) => language === 'en'
+    ? ingredient.nombre_en ?? ingredient.nombre_es ?? ingredient.nombre ?? String(ingredient.id)
+    : ingredient.nombre_es ?? ingredient.nombre ?? ingredient.nombre_en ?? String(ingredient.id)
 
   const toggleProduct = (productId: number) => {
     setFlippedProductIds((current) => current.includes(productId)
@@ -342,10 +444,10 @@ export default function Storefront() {
                             <h2>{productName}</h2>
                             <strong className="product-price">{formatPrice(Number(product.precio))}</strong>
                             <div className="product-cart-controls" aria-label={`${text.cart}: ${productName}`}>
-                              {(cartQuantities[product.id] ?? 0) > 0 ? (
+                              {productQuantityInCart(product.id) > 0 ? (
                                 <>
-                                  <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} title={text.removeFromCart} onClick={() => changeCartQuantity(product, -1)}>−</button>
-                                  <span className="product-quantity" aria-live="polite">{cartQuantities[product.id]}</span>
+                                  <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} title={text.removeFromCart} onClick={() => removeLastProductFromCart(product.id)}>−</button>
+                                  <span className="product-quantity" aria-live="polite">{productQuantityInCart(product.id)}</span>
                                 </>
                               ) : null}
                               <button
@@ -353,7 +455,7 @@ export default function Storefront() {
                                 className="quantity-control quantity-add"
                                 aria-label={`${text.addToCart}: ${productName}`}
                                 title={text.addToCart}
-                                onClick={(event) => changeCartQuantity(product, 1, event.currentTarget)}
+                                onClick={(event) => beginAddProduct(product, event.currentTarget)}
                               >+</button>
                             </div>
                           </div>
@@ -421,19 +523,30 @@ export default function Storefront() {
                   <div><p className="storefront-kicker">{text.cart}</p><h2 id="cart-dialog-title">{text.cartTitle}</h2></div>
                   <button type="button" className="cart-close-button" onClick={() => setCartOpen(false)} aria-label={text.closeCart}>×</button>
                 </header>
-                {cartProducts.length ? (
+                {cartLines.length ? (
                   <>
                     <ul className="cart-items">
-                      {cartProducts.map((product) => {
+                      {cartLines.map((line, index) => {
+                        const product = products.find((item) => item.id === line.product_id)
+                        if (!product) return null
                         const productName = language === 'es' ? product.nombre_es : product.nombre_en
+                        const selectedIngredients = recipeIngredients
+                          .find((recipe) => recipe.receta_id === product.receta_id)
+                          ?.materias_primas.filter((material) => line.materia_prima_ids.includes(material.id)) ?? []
                         return (
-                          <li className="cart-item" key={product.id}>
+                          <li className="cart-item" key={`${line.product_id}-${line.materia_prima_ids.join('-')}-${index}`}>
                             {product.imagen_url ? <img src={product.imagen_url} alt="" /> : <span className="cart-item-placeholder" aria-hidden="true">TC</span>}
-                            <div className="cart-item-details"><strong>{productName}</strong><span>{formatPrice(Number(product.precio))}</span></div>
+                            <div className="cart-item-details">
+                              <strong>{productName}</strong>
+                              <span>{formatPrice(Number(product.precio))}</span>
+                              {selectedIngredients.length > 0 ? (
+                                <small>{selectedIngredients.map(ingredientName).join(', ')}</small>
+                              ) : null}
+                            </div>
                             <div className="cart-item-controls" aria-label={`${text.cart}: ${productName}`}>
-                              <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} onClick={() => changeCartQuantity(product, -1)} disabled={checkingOut}>−</button>
-                              <span aria-live="polite">{cartQuantities[product.id]}</span>
-                              <button type="button" className="quantity-control quantity-add" aria-label={`${text.addToCart}: ${productName}`} onClick={(event) => changeCartQuantity(product, 1, event.currentTarget)} disabled={checkingOut}>+</button>
+                              <button type="button" className="quantity-control" aria-label={`${text.removeFromCart}: ${productName}`} onClick={() => changeCartLineQuantity(line, -1)} disabled={checkingOut}>−</button>
+                              <span aria-live="polite">{line.quantity}</span>
+                              <button type="button" className="quantity-control quantity-add" aria-label={`${text.addToCart}: ${productName}`} onClick={() => changeCartLineQuantity(line, 1)} disabled={checkingOut}>+</button>
                             </div>
                           </li>
                         )
@@ -450,6 +563,57 @@ export default function Storefront() {
             </div>
           ) : null}
         </>
+      ) : null}
+      {customizingProduct ? (
+        <div className="ingredient-customization-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) cancelProductCustomization()
+        }}>
+          <section
+            className="ingredient-customization-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ingredient-customization-title"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') cancelProductCustomization()
+            }}
+            tabIndex={-1}
+          >
+            <header className="cart-dialog-header">
+              <div>
+                <p className="storefront-kicker">{language === 'es' ? customizingProduct.nombre_es : customizingProduct.nombre_en}</p>
+                <h2 id="ingredient-customization-title">{text.customTitle}</h2>
+              </div>
+              <button type="button" className="cart-close-button" onClick={cancelProductCustomization} aria-label={text.cancel}>×</button>
+            </header>
+            <p className="ingredient-customization-description">{text.customDescription}</p>
+            <ul className="ingredient-customization-list">
+              {customizingIngredients.map((ingredient) => {
+                const required = ingredient.requerido !== false
+                const checked = required || selectedMateriaPrimaIds.includes(ingredient.id)
+                return (
+                  <li key={ingredient.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={required}
+                        onChange={(event) => setSelectedMateriaPrimaIds((current) => event.target.checked
+                          ? [...current, ingredient.id]
+                          : current.filter((id) => id !== ingredient.id))}
+                      />
+                      <span>{ingredientName(ingredient)}</span>
+                    </label>
+                    <small>{required ? text.required : text.optional}</small>
+                  </li>
+                )
+              })}
+            </ul>
+            <footer className="ingredient-customization-actions">
+              <button type="button" className="ingredient-cancel-button" onClick={cancelProductCustomization}>{text.cancel}</button>
+              <button type="button" className="checkout-button" onClick={confirmProductCustomization}>{text.addConfigured}</button>
+            </footer>
+          </section>
+        </div>
       ) : null}
     </main>
   )

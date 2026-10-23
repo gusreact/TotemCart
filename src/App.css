@@ -829,6 +829,111 @@
   animation: storefront-enter 160ms ease both;
 }
 
+.ingredient-customization-overlay {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(22, 35, 29, 0.54);
+  backdrop-filter: blur(3px);
+  animation: storefront-enter 160ms ease both;
+}
+
+.ingredient-customization-dialog {
+  width: min(100%, 520px);
+  max-height: min(82vh, 680px);
+  overflow: auto;
+  padding: 24px 26px;
+  border: 1px solid var(--store-line);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgba(20, 35, 27, 0.24);
+  animation: cart-rise 220ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.ingredient-customization-description {
+  margin: 16px 0 10px;
+  color: var(--store-muted);
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.84rem;
+}
+
+.ingredient-customization-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ingredient-customization-list li {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #edf0e9;
+  font-family: 'Trebuchet MS', sans-serif;
+}
+
+.ingredient-customization-list label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: var(--store-ink);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.ingredient-customization-list label input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  accent-color: var(--store-green);
+}
+
+.ingredient-customization-list label input:disabled {
+  cursor: not-allowed;
+}
+
+.ingredient-customization-list small {
+  flex: 0 0 auto;
+  color: var(--store-muted);
+  font-size: 0.72rem;
+}
+
+.ingredient-customization-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.ingredient-customization-actions .checkout-button {
+  width: auto;
+  min-height: 42px;
+  margin: 0;
+}
+
+.ingredient-cancel-button {
+  min-height: 42px;
+  padding: 10px 15px;
+  border: 1px solid var(--store-line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--store-ink);
+  cursor: pointer;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.84rem;
+}
+
+.ingredient-cancel-button:hover {
+  background: #edf2e8;
+}
+
 .cart-dialog {
   width: min(100%, 620px);
   max-height: min(78vh, 720px);
@@ -922,6 +1027,13 @@
   color: var(--store-muted);
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 0.78rem;
+}
+
+.cart-item-details small {
+  color: var(--store-muted);
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .cart-item-controls { gap: 7px; }
@@ -1175,6 +1287,8 @@
   .store-cart-button { bottom: max(14px, env(safe-area-inset-bottom)); min-height: 52px; }
   .cart-overlay { align-items: end; padding: 0; }
   .cart-dialog { width: 100%; max-height: 82vh; padding: 22px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 12px 12px 0 0; }
+  .ingredient-customization-overlay { align-items: end; padding: 0; }
+  .ingredient-customization-dialog { width: 100%; max-height: 82vh; padding: 22px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 12px 12px 0 0; }
   .cart-item { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 9px; }
   .cart-item > img,
   .cart-item-placeholder { width: 48px; height: 46px; }
@@ -1849,6 +1963,27 @@
 .recipe-material-edit-list li > div {
   display: grid;
   gap: 3px;
+}
+
+.recipe-material-edit-list .recipe-material-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.recipe-material-required {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #526158;
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+
+.recipe-material-required input {
+  width: 16px;
+  height: 16px;
+  accent-color: #27654d;
 }
 
 .recipe-material-edit-list strong {

@@ -165,7 +165,8 @@ function LowStockDialog({ materials, onClose }: { materials: Row[]; onClose: () 
       <ul className="low-stock-list">
         {materials.map((material) => (
           <li key={String(material.id)}>
-            <strong>{valueOf(material, 'nombre')}</strong>
+            <strong>{valueOf({ value: material.nombre_es ?? material.nombre ?? material.nombre_en }, 'value')}</strong>
+            {material.nombre_es && material.nombre_en ? <span>{String(material.nombre_en)}</span> : null}
             <span>
               Stock: {valueOf(material, 'stock')} / Mínimo: {valueOf(material, 'stock_min')}
               {material.unidad_medida ? ` ${String(material.unidad_medida)}` : ''}

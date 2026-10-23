@@ -19,14 +19,17 @@ export type PendingAction = {
   body?: FormData | string
   rowId?: unknown
   label: string
-  recipeMaterials?: { id: number; cantidad: number }[]
+  recipeMaterials?: { id: number; cantidad: number; requerido: boolean }[]
 }
 
 export type RecipeMaterial = {
   id: number
-  nombre: string
+  nombre?: string
+  nombre_es?: string
+  nombre_en?: string
   unidad_medida: string
   cantidad: string | number
+  requerido?: boolean
 }
 
 export type RecipeWithMaterials = {
@@ -35,7 +38,10 @@ export type RecipeWithMaterials = {
   materias_primas: RecipeMaterial[]
 }
 
-export type RecipeMaterialDraft = Omit<RecipeMaterial, 'cantidad'> & { cantidad: string }
+export type RecipeMaterialDraft = Omit<RecipeMaterial, 'cantidad' | 'requerido'> & {
+  cantidad: string
+  requerido: boolean
+}
 
 export const sections: { id: AdminSection; label: string; endpoint?: string }[] = [
   { id: 'categorias', label: 'Categorías', endpoint: '/api/categorias' },
@@ -68,7 +74,8 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
     { name: 'instrucciones_en', label: 'Instrucciones en inglés', kind: 'textarea' },
   ],
   'materias-primas': [
-    { name: 'nombre', label: 'Nombre', kind: 'text', required: true },
+    { name: 'nombre_es', label: 'Nombre en español', kind: 'text', required: true },
+    { name: 'nombre_en', label: 'Nombre en inglés', kind: 'text', required: true },
     { name: 'unidad_medida_id', label: 'Unidad de medida', kind: 'select', required: true },
     { name: 'stock', label: 'Stock', kind: 'number', required: true },
     { name: 'stock_min', label: 'Stock mínimo', kind: 'number' },
@@ -97,7 +104,8 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
     { name: 'instrucciones_en', label: 'Instrucciones en inglés' },
   ],
   'materias-primas': [
-    { name: 'nombre', label: 'Materia prima' },
+    { name: 'nombre_es', label: 'Nombre en español' },
+    { name: 'nombre_en', label: 'Nombre en inglés' },
     { name: 'unidad_medida_id', label: 'Unidad de medida' },
     { name: 'stock', label: 'Stock' },
     { name: 'stock_min', label: 'Stock mínimo' },
