@@ -131,7 +131,7 @@ export function CatalogManager({
     setImagePreview('')
     setIsReplacementPreview(false)
     setEditing(null)
-    setDraft({ disponible: true })
+    setDraft({ disponible: true, tiempo_preparacion_enabled: false })
     setDraftMaterials([])
     setSelectedMaterialId('')
     setMaterialQuantity('1')
@@ -170,12 +170,18 @@ export function CatalogManager({
     setEditing(row)
     setImagePreview((section === 'categorias' || section === 'productos') && typeof row.imagen_url === 'string' ? row.imagen_url : '')
     setIsReplacementPreview(false)
-    setDraft(Object.fromEntries(fields.filter((field) => field.kind !== 'file').map((field) => [
+    const nextDraft = Object.fromEntries(fields.filter((field) => field.kind !== 'file').map((field) => [
       field.name,
       field.kind === 'checkbox' ? Boolean(row[field.name]) : String(row[field.name] ?? (field.name === 'unidad_medida_id'
         ? units.find((unit) => unit.medida_es === row.unidad_medida || unit.medida_en === row.unidad_medida)?.id ?? ''
         : '')),
-    ])))
+    ]))
+    if (section === 'productos') {
+      nextDraft.tiempo_preparacion_enabled = row.tiempo_preparacion !== null &&
+        row.tiempo_preparacion !== undefined &&
+        row.tiempo_preparacion !== ''
+    }
+    setDraft(nextDraft)
     if (section === 'recetas') {
       const grouped = recipeMaterials.find((recipe) => recipe.receta_id === Number(row.id))
       setDraftMaterials(grouped?.materias_primas.map((material) => ({
@@ -202,6 +208,7 @@ export function CatalogManager({
         const formData = new FormData()
         for (const field of fields) {
           const input = event.currentTarget.elements.namedItem(field.name)
+          if (field.nullable && draft[`${field.name}_enabled`] !== true) continue
           if (field.kind === 'file') {
             const file = input instanceof HTMLInputElement ? input.files?.[0] : undefined
             if (field.required && !editing && !file) throw new Error(`Selecciona un archivo para "${field.label}".`)
@@ -412,6 +419,30 @@ export function CatalogManager({
               <label className={field.kind === 'checkbox' ? 'check-field' : ''} key={field.name}>
                 {field.kind === 'checkbox' ? (
                   <><input type="checkbox" checked={Boolean(draft[field.name])} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.checked }))} /><span>{field.label}</span></>
+                ) : field.nullable ? (
+                  <>
+                    <span>{field.label}</span>
+                    <span className="nullable-field-toggle">
+                      <input
+                        type="checkbox"
+                          checked={draft[`${field.name}_enabled`] === true}
+                        onChange={(event) => setDraft((current) => ({
+                          ...current,
+                          [`${field.name}_enabled`]: event.target.checked,
+                        }))}
+                      />
+                      <span>Definir tiempo de preparación</span>
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={String(draft[field.name] ?? '')}
+                      disabled={draft[`${field.name}_enabled`] !== true}
+                      required={draft[`${field.name}_enabled`] === true}
+                      onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}
+                    />
+                  </>
                 ) : <><span>{field.label}</span>{field.kind === 'textarea' ? (
                   <textarea value={String(draft[field.name] ?? '')} required={field.required} rows={4} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))} />
                 ) : field.kind === 'select' ? (

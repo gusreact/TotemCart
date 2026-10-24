@@ -685,10 +685,25 @@
   overflow-wrap: anywhere;
 }
 
+.product-price-details {
+  display: grid;
+  justify-items: end;
+  align-content: center;
+  gap: 3px;
+}
+
 .product-price {
   color: var(--store-green);
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.product-preparation-time {
+  color: var(--store-muted);
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -701,8 +716,14 @@
 
 .product-cart-controls {
   grid-column: 1 / -1;
-  justify-self: start;
+  width: 100%;
+  justify-self: stretch;
   margin-top: 7px;
+}
+
+.product-cart-controls .product-preparation-time {
+  margin-left: auto;
+  align-self: flex-end;
 }
 
 .quantity-control {
@@ -2135,6 +2156,21 @@
   align-items: center;
   gap: 9px;
   padding: 5px 0;
+}
+
+.nullable-field-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #526158;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.nullable-field-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #27654d;
 }
 
 .check-field input {

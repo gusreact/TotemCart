@@ -16,6 +16,7 @@ type StoreProduct = {
   nombre_es: string
   nombre_en: string
   precio: string | number
+  tiempo_preparacion?: number | string | null
   imagen_url?: string
   disponible?: boolean | null
 }
@@ -435,6 +436,7 @@ export default function Storefront() {
                   const recipe = recipes.find((item) => item.id === product.receta_id)
                   const instructions = language === 'es' ? recipe?.instrucciones_es : recipe?.instrucciones_en
                   const productName = language === 'es' ? product.nombre_es : product.nombre_en
+                  const preparationTime = product.tiempo_preparacion
                   return (
                     <article className={`product-card${isFlipped ? ' is-flipped' : ''}`} key={product.id} style={{ animationDelay: `${index * 45}ms` }}>
                       <div className="product-card-inner">
@@ -442,7 +444,9 @@ export default function Storefront() {
                           {product.imagen_url ? <img className="product-image" src={product.imagen_url} alt="" /> : <div className="product-image-placeholder" aria-hidden="true"><span>TC</span></div>}
                           <div className="product-card-copy">
                             <h2>{productName}</h2>
-                            <strong className="product-price">{formatPrice(Number(product.precio))}</strong>
+                            <div className="product-price-details">
+                              <strong className="product-price">{formatPrice(Number(product.precio))}</strong>
+                            </div>
                             <div className="product-cart-controls" aria-label={`${text.cart}: ${productName}`}>
                               {productQuantityInCart(product.id) > 0 ? (
                                 <>
@@ -457,6 +461,9 @@ export default function Storefront() {
                                 title={text.addToCart}
                                 onClick={(event) => beginAddProduct(product, event.currentTarget)}
                               >+</button>
+                              {preparationTime !== null && preparationTime !== undefined && preparationTime !== '' && Number.isFinite(Number(preparationTime)) ? (
+                                <span className="product-preparation-time">{preparationTime}m</span>
+                              ) : null}
                             </div>
                           </div>
                           <button type="button" className="product-info-button" aria-label={`${text.details}: ${productName}`} title={text.details} onClick={() => toggleProduct(product.id)}>

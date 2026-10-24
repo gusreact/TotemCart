@@ -8,6 +8,7 @@ export type Field = {
   label: string
   kind: FieldKind
   required?: boolean
+  nullable?: boolean
   options?: { value: string; label: string }[]
   accept?: string
 }
@@ -65,6 +66,7 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
     { name: 'nombre_es', label: 'Nombre en español', kind: 'text', required: true },
     { name: 'nombre_en', label: 'Nombre en inglés', kind: 'text', required: true },
     { name: 'precio', label: 'Precio', kind: 'number', required: true },
+    { name: 'tiempo_preparacion', label: 'Minutos', kind: 'number', nullable: true },
     { name: 'disponible', label: 'Disponible', kind: 'checkbox' },
     { name: 'file', label: 'Imagen del producto', kind: 'file', required: true, accept: 'image/*' },
   ],
@@ -96,6 +98,7 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
     { name: 'nombre_es', label: 'Producto' },
     { name: 'categoria_nombre_es', label: 'Categoría' },
     { name: 'precio', label: 'Precio' },
+    { name: 'tiempo_preparacion', label: 'Minutos' },
     { name: 'disponible', label: 'Disponible' },
   ],
   recetas: [
