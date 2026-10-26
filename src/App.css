@@ -1145,6 +1145,31 @@
   line-height: 1.6;
 }
 
+.checkout-order-code {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 28px 0 20px;
+  padding: 20px;
+  border: 1px solid var(--store-line);
+  border-radius: 6px;
+  background: #f8faf5;
+  text-align: center;
+}
+
+.checkout-order-code span {
+  color: var(--store-muted);
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 0.8rem;
+}
+
+.checkout-order-code strong {
+  color: var(--store-green);
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  overflow-wrap: anywhere;
+}
+
 .checkout-return-link {
   display: inline-flex;
   margin-top: 12px;

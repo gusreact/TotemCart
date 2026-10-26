@@ -1,7 +1,7 @@
 import './App.css'
 import LoginPage from './components/LoginPage'
 import { AuthProvider } from './providers/AuthProvider'
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import Storefront from './features/storefront/Storefront'
 
 function App() {
@@ -22,6 +22,8 @@ function App() {
 export default App
 
 function CheckoutResult({ status }: { status: 'success' | 'failure' | 'pending' }) {
+  const [searchParams] = useSearchParams()
+  const pedidoCodigo = status === 'success' ? searchParams.get('pedido_codigo')?.trim() : undefined
   const content = {
     success: {
       eyebrow: 'Checkout',
@@ -50,6 +52,12 @@ function CheckoutResult({ status }: { status: 'success' | 'failure' | 'pending' 
         <h1>{content.title}</h1>
         <p>{content.message}</p>
         <p>{content.spanishMessage}</p>
+        {pedidoCodigo ? (
+          <div className="checkout-order-code">
+            <span>Order code / Código de pedido</span>
+            <strong>{pedidoCodigo}</strong>
+          </div>
+        ) : null}
         <Link className="checkout-return-link" to="/">Return to menu / Volver al menú</Link>
       </section>
     </main>
