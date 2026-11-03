@@ -26,7 +26,7 @@ export default function LoginPage() {
   }
 
   if (isAuthenticated && user) {
-    return <AdminWorkspace token={token} username={user.username} nombre={user.nombre} onLogout={logout} />
+    return <AdminWorkspace token={token} username={user.username} nombre={user.nombre} roleId={user.role_id} onLogout={logout} />
   }
 
   return (

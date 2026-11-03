@@ -3,6 +3,7 @@ import { createContext } from 'react'
 export type AuthUser = {
   username: string
   nombre: string
+  role_id?: string | number
 }
 
 export type AuthResponse = {
@@ -10,6 +11,7 @@ export type AuthResponse = {
   token_type: string
   username: string
   nombre: string
+  role_id: string | number
 }
 
 export type AuthContextValue = {
@@ -21,7 +23,6 @@ export type AuthContextValue = {
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
-
 
 
 

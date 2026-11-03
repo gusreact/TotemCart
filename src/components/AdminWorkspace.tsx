@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { CatalogManager } from '../features/catalog/CatalogManager'
+import { OrdersManager } from '../features/orders/OrdersManager'
 import { sections, type AdminSection, type Row } from '../features/catalog/catalogModel'
 import { apiRequest, unwrapRows, valueOf } from '../services/apiClient'
 import { UserManager } from './UserManager'
@@ -8,17 +9,29 @@ type AdminWorkspaceProps = {
   token?: string | null
   username: string
   nombre: string
+  roleId?: string | number
   onLogout: () => void
 }
 
-export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorkspaceProps) {
-  const [activeSection, setActiveSection] = useState<AdminSection>('categorias')
-  const [navigationCollapsed, setNavigationCollapsed] = useState(false)
+export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: AdminWorkspaceProps) {
+  const isAdministrator = Number(roleId) === 1
+  const isCook = Number(roleId) === 2
+  const visibleSections = useMemo(
+    () => isAdministrator ? sections : isCook ? sections.filter((section) => section.id === 'pedidos') : [],
+    [isAdministrator, isCook],
+  )
+  const [activeSection, setActiveSection] = useState<AdminSection>(isCook ? 'pedidos' : 'categorias')
+  const currentSection = visibleSections.some((section) => section.id === activeSection)
+    ? activeSection
+    : visibleSections[0]?.id
+  const [navigationCollapsed, setNavigationCollapsed] = useState(isCook)
   const [lowStockMaterials, setLowStockMaterials] = useState<Row[]>([])
   const [inventoryError, setInventoryError] = useState('')
   const [lowStockDialogOpen, setLowStockDialogOpen] = useState(false)
 
   useEffect(() => {
+    if (!isAdministrator) return
+
     let active = true
     const loadMaterials = async () => {
       try {
@@ -32,7 +45,7 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
     }
     void loadMaterials()
     return () => { active = false }
-  }, [token])
+  }, [isAdministrator, token])
 
   const updateMaterials = useCallback((rows: Row[]) => {
     setLowStockMaterials(getLowStockMaterials(rows))
@@ -47,7 +60,7 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
           <span>TotemCart <small>ADMIN</small></span>
         </a>
         <div className="admin-account">
-          {lowStockMaterials.length > 0 ? (
+          {isAdministrator && lowStockMaterials.length > 0 ? (
             <button
               type="button"
               className="low-stock-alert-button"
@@ -61,7 +74,7 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
               </svg>
             </button>
           ) : null}
-          {inventoryError ? <span className="inventory-check-error" role="alert">No se pudo verificar el stock: {inventoryError}</span> : null}
+          {isAdministrator && inventoryError ? <span className="inventory-check-error" role="alert">No se pudo verificar el stock: {inventoryError}</span> : null}
           <div className="account-copy"><strong>{nombre}</strong><span>{username}</span></div>
           <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button>
         </div>
@@ -85,13 +98,13 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
             </svg>
             <span className="navigation-toggle-label">Menú</span>
           </button>
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <button
               type="button"
               key={section.id}
-              className={`admin-nav-item${activeSection === section.id ? ' is-active' : ''}`}
+              className={`admin-nav-item${currentSection === section.id ? ' is-active' : ''}`}
               onClick={() => setActiveSection(section.id)}
-              aria-current={activeSection === section.id ? 'page' : undefined}
+              aria-current={currentSection === section.id ? 'page' : undefined}
               aria-label={section.label}
               title={section.label}
             >
@@ -102,7 +115,11 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
         </nav>
 
         <section className="admin-content" aria-live="polite">
-          {activeSection === 'usuarios' ? (
+          {visibleSections.length === 0 ? (
+            <p className="error-message" role="alert">No se pudo identificar el rol de este usuario. Cierra sesión e inicia nuevamente.</p>
+          ) : currentSection === 'pedidos' ? (
+            <OrdersManager token={token} />
+          ) : currentSection === 'usuarios' ? (
             <>
               <div className="section-heading">
                 <div><p className="eyebrow">Administración</p><h1>Usuarios</h1></div>
@@ -112,10 +129,10 @@ export function AdminWorkspace({ token, username, nombre, onLogout }: AdminWorks
             </>
           ) : (
             <CatalogManager
-              key={activeSection}
-              section={activeSection}
+              key={currentSection}
+              section={currentSection ?? activeSection}
               token={token}
-              onMaterialsChange={activeSection === 'materias-primas' ? updateMaterials : undefined}
+              onMaterialsChange={currentSection === 'materias-primas' ? updateMaterials : undefined}
             />
           )}
         </section>
@@ -185,6 +202,9 @@ function NavIcon({ section }: { section: AdminSection }) {
     recetas: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5v-12Z" /><path d="M4 6v12a2 2 0 0 1 2-2h14M8 7h8M8 10h8" /></>,
     'materias-primas': <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8" /></>,
     'unidades-medida': <><path d="M4 20h16M6 17V7M10 17v-4M14 17V7M18 17v-4" /><path d="M4 7h16" /></>,
+    roles: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 11l2 2 3.5-4" /></>,
+    'pedido-estados': <><path d="M7 3h10l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M17 3v5h4M9 13h8M9 17h5" /></>,
+    pedidos: <><path d="M3 5h2l2.2 10.5a2 2 0 0 0 2 1.5h8.9a2 2 0 0 0 1.9-1.4L22 8H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /><path d="M9 11h8" /></>,
     usuarios: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.8M17 14a4.5 4.5 0 0 1 3.5 4.4" /></>,
   }
 

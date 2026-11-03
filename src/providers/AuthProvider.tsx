@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AuthContext, type AuthContextValue, type AuthUser, type AuthResponse } from '../context/AuthContext'
+import { SESSION_EXPIRED_EVENT } from '../services/apiClient'
 
 const STORAGE_KEY = 'totemcart-auth'
 
@@ -32,6 +33,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(`${STORAGE_KEY}:token`)
     window.localStorage.removeItem(`${STORAGE_KEY}:user`)
   }, [token, user])
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setToken(null)
+      setUser(null)
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+  }, [])
 
   const login = async (username: string, password: string) => {
     const loginUrl = `${import.meta.env.VITE_RENDER_API_DOMAIN}/api/auth/login`
@@ -66,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({
       username: data.username,
       nombre: data.nombre,
+      role_id: data.role_id,
     })
   }
 

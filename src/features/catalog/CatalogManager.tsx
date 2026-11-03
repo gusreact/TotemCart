@@ -226,6 +226,7 @@ export function CatalogManager({
       } else {
         const payload: Record<string, unknown> = {}
         for (const field of fields) {
+          if (editing && field.createOnly) continue
           const value = draft[field.name]
           if (field.kind === 'checkbox') payload[field.name] = Boolean(value)
           else if (typeof value === 'string' && value !== '') {
@@ -371,7 +372,9 @@ export function CatalogManager({
                           <div className={`table-actions${section === 'recetas' ? ' recipe-table-actions' : ''}`}>
                             <div className="table-actions-primary">
                               <button type="button" className="text-action" onClick={() => beginEdit(row)}>Editar</button>
-                              <button type="button" className="text-action delete-action" onClick={() => handleDelete(row)}>Eliminar</button>
+                              {section !== 'roles' || row.inmutable !== true ? (
+                                <button type="button" className="text-action delete-action" onClick={() => handleDelete(row)}>Eliminar</button>
+                              ) : null}
                             </div>
                             {section === 'recetas' ? (
                               <button
@@ -475,7 +478,17 @@ export function CatalogManager({
                     />
                   </>
                 ) : (
-                  <input type={field.kind} min={field.kind === 'number' ? '0' : undefined} step={field.name === 'precio' || field.name === 'stock' || field.name === 'stock_min' ? '0.01' : '1'} value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))} />
+                  <input
+                    type={field.kind}
+                    min={field.min ?? (field.kind === 'number' ? '0' : undefined)}
+                    max={field.max}
+                    maxLength={field.maxLength}
+                    step={field.name === 'precio' || field.name === 'stock' || field.name === 'stock_min' ? '0.01' : '1'}
+                    value={String(draft[field.name] ?? '')}
+                    required={field.required}
+                    disabled={Boolean(editing && field.createOnly)}
+                    onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}
+                  />
                 )}</>}
               </label>
             ))}

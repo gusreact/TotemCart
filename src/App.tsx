@@ -3,6 +3,8 @@ import LoginPage from './components/LoginPage'
 import { AuthProvider } from './providers/AuthProvider'
 import { BrowserRouter, Link, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import Storefront from './features/storefront/Storefront'
+import { readStoredLanguage } from './features/storefront/language'
+import { CheckoutOrderStatus } from './features/orders/CheckoutOrderStatus'
 
 function App() {
   return (
@@ -23,42 +25,66 @@ export default App
 
 function CheckoutResult({ status }: { status: 'success' | 'failure' | 'pending' }) {
   const [searchParams] = useSearchParams()
+  const language = readStoredLanguage() ?? 'es'
   const pedidoCodigo = status === 'success' ? searchParams.get('pedido_codigo')?.trim() : undefined
   const content = {
     success: {
-      eyebrow: 'Checkout',
-      title: 'Payment submitted / Pago enviado',
-      message: 'Mercado Pago returned you to the success page. Final payment confirmation is handled by the server.',
-      spanishMessage: 'Mercado Pago te devolvió a la página de éxito. La confirmación final del pago la realiza el servidor.',
+      es: {
+        eyebrow: 'Pago',
+        title: 'Pago enviado',
+        message: 'Mercado Pago te devolvió a la página de éxito. La confirmación final del pago la realiza el servidor.',
+      },
+      en: {
+        eyebrow: 'Checkout',
+        title: 'Payment submitted',
+        message: 'Mercado Pago returned you to the success page. Final payment confirmation is handled by the server.',
+      },
     },
     failure: {
-      eyebrow: 'Checkout',
-      title: 'Payment not completed / Pago no completado',
-      message: 'Your payment was not completed. You can return to the menu and try again.',
-      spanishMessage: 'El pago no se completó. Puedes volver al menú e intentarlo de nuevo.',
+      es: {
+        eyebrow: 'Pago',
+        title: 'Pago no completado',
+        message: 'El pago no se completó. Puedes volver al menú e intentarlo de nuevo.',
+      },
+      en: {
+        eyebrow: 'Checkout',
+        title: 'Payment not completed',
+        message: 'Your payment was not completed. You can return to the menu and try again.',
+      },
     },
     pending: {
-      eyebrow: 'Checkout',
-      title: 'Payment pending / Pago pendiente',
-      message: 'Your payment is still being processed. The server will confirm the final status.',
-      spanishMessage: 'Tu pago todavía se está procesando. El servidor confirmará el estado final.',
+      es: {
+        eyebrow: 'Pago',
+        title: 'Pago pendiente',
+        message: 'Tu pago todavía se está procesando. El servidor confirmará el estado final.',
+      },
+      en: {
+        eyebrow: 'Checkout',
+        title: 'Payment pending',
+        message: 'Your payment is still being processed. The server will confirm the final status.',
+      },
     },
   }[status]
+  const localizedContent = content[language]
 
   return (
     <main className="storefront checkout-result-page">
       <section className="checkout-result-card" aria-live="polite">
-        <p className="storefront-kicker">{content.eyebrow}</p>
-        <h1>{content.title}</h1>
-        <p>{content.message}</p>
-        <p>{content.spanishMessage}</p>
+        <p className="storefront-kicker">{localizedContent.eyebrow}</p>
+        <h1>{localizedContent.title}</h1>
+        <p>{localizedContent.message}</p>
         {pedidoCodigo ? (
           <div className="checkout-order-code">
-            <span>Order code / Código de pedido</span>
+            <span>{language === 'es' ? 'Código de pedido' : 'Order code'}</span>
             <strong>{pedidoCodigo}</strong>
           </div>
         ) : null}
-        <Link className="checkout-return-link" to="/">Return to menu / Volver al menú</Link>
+        <div className="checkout-result-actions">
+          <Link className="checkout-return-link" to="/">
+            {language === 'es' ? 'Volver al menú' : 'Return to menu'}
+          </Link>
+          {pedidoCodigo ? <CheckoutOrderStatus pedidoCodigo={pedidoCodigo} language={language} /> : null}
+        </div>
       </section>
     </main>
   )

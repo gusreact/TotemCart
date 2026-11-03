@@ -1,5 +1,5 @@
-export type AdminSection = 'categorias' | 'productos' | 'recetas' | 'materias-primas' | 'unidades-medida' | 'usuarios'
-export type CatalogResource = Exclude<AdminSection, 'usuarios'>
+export type AdminSection = 'categorias' | 'productos' | 'recetas' | 'materias-primas' | 'unidades-medida' | 'roles' | 'pedido-estados' | 'pedidos' | 'usuarios'
+export type CatalogResource = Exclude<AdminSection, 'usuarios' | 'pedidos'>
 export type Row = Record<string, unknown>
 export type FieldKind = 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'file'
 
@@ -9,6 +9,10 @@ export type Field = {
   kind: FieldKind
   required?: boolean
   nullable?: boolean
+  createOnly?: boolean
+  min?: number
+  max?: number
+  maxLength?: number
   options?: { value: string; label: string }[]
   accept?: string
 }
@@ -50,6 +54,9 @@ export const sections: { id: AdminSection; label: string; endpoint?: string }[] 
   { id: 'recetas', label: 'Recetas', endpoint: '/api/recetas' },
   { id: 'materias-primas', label: 'Materia Prima', endpoint: '/api/materias-primas' },
   { id: 'unidades-medida', label: 'Unidades de Medida', endpoint: '/api/unidades-medida' },
+  { id: 'roles', label: 'Roles', endpoint: '/api/roles' },
+  { id: 'pedido-estados', label: 'Estado Pedidos', endpoint: '/api/pedido-estados' },
+  { id: 'pedidos', label: 'Pedidos' },
   { id: 'usuarios', label: 'Usuarios' },
 ]
 
@@ -86,6 +93,15 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
     { name: 'medida_es', label: 'Medida en español', kind: 'text', required: true },
     { name: 'medida_en', label: 'Medida en inglés', kind: 'text', required: true },
   ],
+  roles: [
+    { name: 'nombre_es', label: 'Nombre en español', kind: 'text', required: true },
+    { name: 'nombre_en', label: 'Nombre en inglés', kind: 'text', required: true },
+  ],
+  'pedido-estados': [
+    { name: 'id', label: 'ID (1–5)', kind: 'number', required: true, createOnly: true, min: 1, max: 5 },
+    { name: 'descripcion_es', label: 'Descripción en español', kind: 'text', required: true, maxLength: 50 },
+    { name: 'descripcion_en', label: 'Descripción en inglés', kind: 'text', required: true, maxLength: 50 },
+  ],
 }
 
 export const displayFields: Record<CatalogResource, { name: string; label: string }[]> = {
@@ -116,5 +132,14 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
   'unidades-medida': [
     { name: 'medida_es', label: 'Medida en español' },
     { name: 'medida_en', label: 'Medida en inglés' },
+  ],
+  roles: [
+    { name: 'nombre_es', label: 'Nombre en español' },
+    { name: 'nombre_en', label: 'Nombre en inglés' },
+  ],
+  'pedido-estados': [
+    { name: 'id', label: 'ID' },
+    { name: 'descripcion_es', label: 'Descripción en español' },
+    { name: 'descripcion_en', label: 'Descripción en inglés' },
   ],
 }

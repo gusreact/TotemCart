@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    define: {
+      'import.meta.env.LOCAL_PAYMENT_SIMULATION': JSON.stringify(env.LOCAL_PAYMENT_SIMULATION === 'true'),
+    },
     server: {
       proxy: {
         '/api': {

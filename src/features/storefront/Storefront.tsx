@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
+import { readStoredLanguage, storeLanguage, type Language } from './language'
 
-type Language = 'es' | 'en'
 type StoreCategory = {
   id: number
   nombre_es: string
@@ -159,7 +159,7 @@ async function fetchStorefrontData() {
 }
 
 export default function Storefront() {
-  const [language, setLanguage] = useState<Language | null>(null)
+  const [language, setLanguage] = useState<Language | null>(readStoredLanguage)
   const [selectedCategory, setSelectedCategory] = useState<StoreCategory | null>(null)
   const [categories, setCategories] = useState<StoreCategory[]>([])
   const [products, setProducts] = useState<StoreProduct[]>([])
@@ -230,6 +230,11 @@ export default function Storefront() {
     ? recipeIngredients.find((recipe) => recipe.receta_id === customizingProduct.receta_id)?.materias_primas ?? []
     : []
 
+  const updateLanguage = (nextLanguage: Language) => {
+    storeLanguage(nextLanguage)
+    setLanguage(nextLanguage)
+  }
+
   useEffect(() => {
     if (cartLines.length === 0) {
       sessionStorage.removeItem(CART_STORAGE_KEY)
@@ -259,11 +264,11 @@ export default function Storefront() {
       if (typeof checkoutUrl !== 'string' || !checkoutUrl) {
         throw new Error('El servidor no devolvió la URL de Checkout Pro.')
       }
-      const parsedCheckoutUrl = new URL(checkoutUrl)
-      if (parsedCheckoutUrl.protocol !== 'https:') {
+      const parsedCheckout = new URL(checkoutUrl)
+      if (!import.meta.env.LOCAL_PAYMENT_SIMULATION && parsedCheckout.protocol !== 'https:') {
         throw new Error('El servidor devolvió una URL de pago no segura.')
       }
-      window.location.assign(parsedCheckoutUrl.toString())
+      window.location.assign(parsedCheckout.toString())
     } catch (checkoutRequestError) {
       setCheckoutError(checkoutRequestError instanceof Error ? checkoutRequestError.message : text.checkoutError)
       setCheckingOut(false)
@@ -398,12 +403,12 @@ export default function Storefront() {
             </p>
             <h1>{copy.es.chooseLanguage}<br /><span>{copy.en.chooseLanguage}</span></h1>
             <div className="language-choice-grid" aria-label="Language selection">
-              <button type="button" className="language-choice language-choice-es" onClick={() => setLanguage('es')}>
+              <button type="button" className="language-choice language-choice-es" onClick={() => updateLanguage('es')}>
                 <img className="language-flag" src="https://flagcdn.com/w160/es.png" alt="Flag of Spain" />
                 <span className="language-name">Español</span>
                 <span className="language-hint">Ver menú en español</span>
               </button>
-              <button type="button" className="language-choice language-choice-en" onClick={() => setLanguage('en')}>
+              <button type="button" className="language-choice language-choice-en" onClick={() => updateLanguage('en')}>
                 <img className="language-flag" src="https://flagcdn.com/w160/us.png" alt="Flag of the United States" />
                 <span className="language-name">English</span>
                 <span className="language-hint">Browse in English</span>
@@ -420,7 +425,7 @@ export default function Storefront() {
           </div>
         ) : selectedCategory ? (
           <div className="product-view">
-            <LogoAndLanguage language={language} setLanguage={setLanguage} />
+            <LogoAndLanguage language={language} setLanguage={updateLanguage} />
             <div className="storefront-heading-row">
               <button type="button" className="storefront-back" onClick={returnToCategories}>
                 <span aria-hidden="true">←</span>{text.back}
@@ -487,7 +492,7 @@ export default function Storefront() {
           </div>
         ) : (
           <div className="category-view">
-            <LogoAndLanguage language={language} setLanguage={setLanguage} />
+            <LogoAndLanguage language={language} setLanguage={updateLanguage} />
             <div className="storefront-heading">
               <p className="storefront-kicker">{text.kicker}</p>
               <h1>{text.title}</h1>

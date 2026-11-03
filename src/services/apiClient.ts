@@ -1,4 +1,13 @@
 const apiBase = import.meta.env.VITE_RENDER_API_DOMAIN
+export const SESSION_EXPIRED_EVENT = 'totemcart:session-expired'
+const SESSION_EXPIRED_MESSAGE = 'Sesión expirada o token inválido'
+
+export function notifySessionExpired(status: number, message: unknown) {
+  if (status === 401 && typeof message === 'string' &&
+    message.includes(SESSION_EXPIRED_MESSAGE) && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+  }
+}
 
 export async function apiRequest(path: string, token: string | null | undefined, options: RequestInit = {}) {
   const response = await fetch(`${apiBase}${path}`, {
@@ -17,7 +26,9 @@ export async function apiRequest(path: string, token: string | null | undefined,
     const detail = Array.isArray(payload?.detail)
       ? payload.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(', ')
       : payload?.detail
-    throw new Error(detail || payload?.message || 'No se pudo completar la solicitud.')
+    const message = detail || payload?.message || 'No se pudo completar la solicitud.'
+    notifySessionExpired(response.status, message)
+    throw new Error(message)
   }
 
   return payload

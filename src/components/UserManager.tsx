@@ -1,13 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { apiRequest, unwrapRows } from '../services/apiClient'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import { useUsers } from '../hooks/useUsers'
-import type { User, UserCreatePayload, UserRole, UserUpdatePayload } from '../types/user'
+import type { User, UserCreatePayload, UserUpdatePayload } from '../types/user'
+
+type Role = {
+  id: number
+  nombre_es: string
+  nombre_en: string
+}
 
 type UserFormState = {
   username: string
   password: string
   nombre: string
-  role: UserRole
+  role: string
 }
 
 type UserConfirmation =
@@ -19,11 +26,14 @@ const emptyForm: UserFormState = {
   username: '',
   password: '',
   nombre: '',
-  role: 'user',
+  role: '',
 }
 
 export function UserManager({ token }: { token?: string | null }) {
   const { users, loading, error, reload, createUser, updateUser, deleteUser } = useUsers(token)
+  const [roles, setRoles] = useState<Role[]>([])
+  const [rolesLoading, setRolesLoading] = useState(true)
+  const [rolesError, setRolesError] = useState('')
   const [form, setForm] = useState<UserFormState>(emptyForm)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formError, setFormError] = useState('')
@@ -33,22 +43,45 @@ export function UserManager({ token }: { token?: string | null }) {
 
   const totalUsers = useMemo(() => users.length, [users])
 
+  useEffect(() => {
+    let active = true
+    const loadRoles = async () => {
+      setRolesLoading(true)
+      setRolesError('')
+      try {
+        const payload = await apiRequest('/api/roles', token)
+        if (active) setRoles(unwrapRows(payload) as Role[])
+      } catch (err) {
+        if (active) setRolesError(err instanceof Error ? err.message : 'No se pudieron cargar los roles.')
+      } finally {
+        if (active) setRolesLoading(false)
+      }
+    }
+    void loadRoles()
+    return () => { active = false }
+  }, [token])
+
   const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFormError('')
     setSuccessMessage('')
+    const roleId = Number(form.role)
+    if (!Number.isInteger(roleId) || !roles.some((role) => role.id === roleId)) {
+      setFormError('Selecciona un rol válido.')
+      return
+    }
     const payload: UserCreatePayload = {
       username: form.username.trim(),
       password: form.password,
       nombre: form.nombre.trim(),
-      role: form.role,
+      role_id: roleId,
     }
 
     if (editingId !== null) {
       const updatePayload: UserUpdatePayload = {
         ...(payload.username ? { username: payload.username } : {}),
         ...(payload.nombre ? { nombre: payload.nombre } : {}),
-        ...(payload.role ? { role: payload.role } : {}),
+        role_id: roleId,
         ...(payload.password ? { password: payload.password } : {}),
       }
       setConfirmation({ kind: 'update', userId: editingId, payload: updatePayload, label: payload.nombre })
@@ -58,14 +91,21 @@ export function UserManager({ token }: { token?: string | null }) {
   }
 
   const handleEdit = (user: User) => {
+    const userRole = String(user.role_id).trim()
+    const normalizedUserRole = userRole.toLocaleLowerCase()
+    const matchingRole = roles.find((role) => (
+      String(role.id) === userRole ||
+      role.nombre_es.trim().toLocaleLowerCase() === normalizedUserRole ||
+      role.nombre_en.trim().toLocaleLowerCase() === normalizedUserRole
+    ))
     setEditingId(user.id)
     setForm({
       username: user.username,
       password: '',
       nombre: user.nombre,
-      role: user.role,
+      role: matchingRole ? String(matchingRole.id) : '',
     })
-    setFormError('')
+    setFormError(matchingRole ? '' : 'No se encontró el rol asignado a este usuario en la lista de roles.')
     setSuccessMessage('')
   }
 
@@ -160,18 +200,27 @@ export function UserManager({ token }: { token?: string | null }) {
           <span>Role</span>
           <select
             value={form.role}
-            onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as 'user' | 'admin' }))}
+            onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+            required
+            disabled={rolesLoading || Boolean(rolesError)}
           >
-            <option value="user">user</option>
-            <option value="admin">admin</option>
+            <option value="">{rolesLoading ? 'Cargando roles...' : 'Selecciona un rol'}</option>
+            {roles.map((role) => (
+              <option key={role.id} value={String(role.id)}>
+                {[role.nombre_es, role.nombre_en].filter(Boolean).join(' / ')}
+              </option>
+            ))}
           </select>
         </label>
+
+        {rolesError ? <p className="error-message" role="alert">No se pudieron cargar los roles: {rolesError}</p> : null}
+        {!rolesLoading && !rolesError && roles.length === 0 ? <p className="error-message" role="alert">No hay roles disponibles. Crea un rol antes de asignarlo.</p> : null}
 
         {formError ? <p className="error-message">{formError}</p> : null}
         {successMessage ? <p className="success-message">{successMessage}</p> : null}
 
         <div className="resource-form-actions">
-          <button type="submit" disabled={pendingAction || loading}>
+          <button type="submit" disabled={pendingAction || loading || rolesLoading || roles.length === 0 || Boolean(rolesError)}>
             {pendingAction ? 'Guardando...' : editingId !== null ? 'Actualizar usuario' : 'Crear usuario'}
           </button>
 
@@ -210,19 +259,27 @@ export function UserManager({ token }: { token?: string | null }) {
                 <tr><th>Nombre</th><th>Username</th><th>Rol</th><th><span className="sr-only">Acciones</span></th></tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td>{user.nombre}</td>
-                    <td>{user.username}</td>
-                    <td><span className={`user-role user-role-${user.role}`}>{user.role}</span></td>
-                    <td>
-                      <div className="table-actions">
-                        <button type="button" className="text-action" onClick={() => handleEdit(user)}>Editar</button>
-                        <button type="button" className="text-action delete-action" onClick={() => handleDelete(user)}>Eliminar</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((user) => {
+                  const userRole = String(user.role_id)
+                  const assignedRole = roles.find((role) => (
+                    String(role.id) === userRole ||
+                    role.nombre_es === userRole ||
+                    role.nombre_en === userRole
+                  ))
+                  return (
+                    <tr key={user.id}>
+                      <td>{user.nombre}</td>
+                      <td>{user.username}</td>
+                      <td><span className="user-role">{assignedRole?.nombre_es ?? userRole}</span></td>
+                      <td>
+                        <div className="table-actions">
+                          <button type="button" className="text-action" onClick={() => handleEdit(user)} disabled={rolesLoading}>Editar</button>
+                          <button type="button" className="text-action delete-action" onClick={() => handleDelete(user)}>Eliminar</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

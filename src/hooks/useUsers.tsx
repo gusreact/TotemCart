@@ -38,7 +38,6 @@ export function useUsers(token?: string | null) {
 
       try {
         const data = await userService.getAllUsers(token)
-
         setUsers(Array.isArray(data) ? data : [])
       } catch (err) {
         setError(err instanceof Error ? err.message : 'No se pudieron cargar los usuarios.')

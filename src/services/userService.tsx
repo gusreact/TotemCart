@@ -1,4 +1,5 @@
 import type { User, UserCreatePayload, UserUpdatePayload } from '../types/user'
+import { notifySessionExpired } from './apiClient'
 
 async function request<T>(path: string, options: RequestInit = {}, token?: string | null): Promise<T> {
   const API_PREFIX = import.meta.env.VITE_RENDER_API_DOMAIN
@@ -18,7 +19,9 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(payload?.detail || payload?.message || 'La solicitud falló.')
+    const message = payload?.detail || payload?.message || 'La solicitud falló.'
+    notifySessionExpired(response.status, message)
+    throw new Error(message)
   }
 
   return payload as T
