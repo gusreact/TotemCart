@@ -425,12 +425,12 @@ export default function Storefront() {
           </div>
         ) : selectedCategory ? (
           <div className="product-view">
-            <LogoAndLanguage language={language} setLanguage={updateLanguage} />
-            <div className="storefront-heading-row">
-              <button type="button" className="storefront-back" onClick={returnToCategories}>
-                <span aria-hidden="true">←</span>{text.back}
-              </button>
-            </div>
+            <LogoAndLanguage
+              language={language}
+              setLanguage={updateLanguage}
+              onBack={returnToCategories}
+              backLabel={text.back}
+            />
             <div className="storefront-heading">
               <h1>{language === 'es' ? selectedCategory.nombre_es : selectedCategory.nombre_en}</h1>
             </div>
@@ -631,21 +631,28 @@ export default function Storefront() {
   )
 }
 
-function LogoAndLanguage({ language, setLanguage }: {
+function LogoAndLanguage({ language, setLanguage, onBack, backLabel }: {
   language: Language
   setLanguage: (language: Language) => void
+  onBack?: () => void
+  backLabel?: string
 }) {
   return (
     <div className="storefront-heading-row">
-        <div className="current-language">
-        <Link className="storefront-brand" to="/" aria-label="TotemCart home">
-            <span className="storefront-brand-mark">T</span>
-            <span>TotemCart</span>
-        </Link>
-        </div>
-        <button type="button" className="language-switch" onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}>
-        <img src={language === 'es' ? 'https://flagcdn.com/w40/us.png' : 'https://flagcdn.com/w40/es.png'} alt="" />
+      {onBack && backLabel ? (
+        <button type="button" className="storefront-back" onClick={onBack}>
+          <span aria-hidden="true">←</span>{backLabel}
         </button>
+      ) : <span aria-hidden="true" />}
+      <div className="current-language">
+        <Link className="storefront-brand" to="/" aria-label="TotemCart home">
+          <span className="storefront-brand-mark">T</span>
+          <span>TotemCart</span>
+        </Link>
+      </div>
+      <button type="button" className="language-switch" onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}>
+        <img src={language === 'es' ? 'https://flagcdn.com/w40/us.png' : 'https://flagcdn.com/w40/es.png'} alt="" />
+      </button>
     </div>
   )
 }
