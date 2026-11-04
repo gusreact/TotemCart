@@ -70,10 +70,15 @@ export function OrdersManager({ token }: { token?: string | null }) {
   const [selectedSale, setSelectedSale] = useState<CheckoutSale | null>(null)
   const [now, setNow] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const ordersRequestInProgress = useRef(false)
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true)
+  const loadOrders = useCallback(async (showLoading = true) => {
+    if (ordersRequestInProgress.current) return
+    ordersRequestInProgress.current = true
+    setRefreshing(true)
+    if (showLoading) setLoading(true)
     setError('')
     try {
       const [salesPayload, statesPayload, productsPayload] = await Promise.all([
@@ -97,12 +102,21 @@ export function OrdersManager({ token }: { token?: string | null }) {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los pedidos.')
     } finally {
-      setLoading(false)
+      ordersRequestInProgress.current = false
+      setRefreshing(false)
+      if (showLoading) setLoading(false)
     }
   }, [token])
 
   useEffect(() => {
-    void Promise.resolve().then(loadOrders)
+    void Promise.resolve().then(() => loadOrders())
+  }, [loadOrders])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadOrders(false)
+    }, 30_000)
+    return () => window.clearInterval(intervalId)
   }, [loadOrders])
 
   useEffect(() => {
@@ -129,7 +143,7 @@ export function OrdersManager({ token }: { token?: string | null }) {
     <div className="orders-manager">
       <div className="section-heading">
         <div><p className="eyebrow">Administración</p><h1>Pedidos</h1></div>
-        <button className="icon-action" type="button" onClick={() => void loadOrders()} disabled={loading} aria-label="Actualizar pedidos" title="Actualizar">↻</button>
+        <button className="icon-action" type="button" onClick={() => void loadOrders()} disabled={refreshing} aria-label="Actualizar pedidos" title="Actualizar">↻</button>
       </div>
 
       <div className="orders-tabs" role="tablist" aria-label="Filtrar pedidos">
