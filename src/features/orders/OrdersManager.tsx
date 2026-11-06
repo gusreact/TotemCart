@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { formatDuration, getMaxPreparationMinutes, getRemainingPreparationSeconds } from './orderTimer'
 
@@ -13,6 +14,7 @@ type CheckoutOrderIngredient = {
   nombre_es: string | null
   nombre_en: string | null
   quantity_per_product: string | number
+  requerido?: boolean
 }
 
 type CheckoutOrderItem = {
@@ -51,21 +53,34 @@ type CheckoutSaleStatusOut = {
 
 type ProductPreparation = {
   id: number
+  receta_id?: number | null
   tiempo_preparacion?: number | string | null
 }
 
-type OrdersTab = 'active' | 'delivered' | 'cancelled'
+type RecipeIngredient = {
+  id: number
+  requerido?: boolean
+}
+
+type RecipeIngredients = {
+  receta_id: number
+  materias_primas: RecipeIngredient[]
+}
+
+type OrdersTab = 'active' | 'ready' | 'delivered' | 'cancelled'
 
 const tabs: { id: OrdersTab; label: string; states: number[]; empty: string }[] = [
-  { id: 'active', label: 'Activos', states: [1, 2, 3], empty: 'No hay pedidos activos.' },
+  { id: 'active', label: 'Activos', states: [1, 2], empty: 'No hay pedidos activos.' },
+  { id: 'ready', label: 'Listo para Retirar', states: [3], empty: 'No hay pedidos listos para retirar.' },
   { id: 'delivered', label: 'Entregados', states: [4], empty: 'No hay pedidos entregados.' },
   { id: 'cancelled', label: 'Cancelados', states: [5], empty: 'No hay pedidos cancelados.' },
 ]
 
-export function OrdersManager({ token }: { token?: string | null }) {
+export function OrdersManager({ token, isAdministrator = false }: { token?: string | null; isAdministrator?: boolean }) {
   const [sales, setSales] = useState<CheckoutSale[]>([])
   const [states, setStates] = useState<PedidoEstado[]>([])
   const [preparationTimes, setPreparationTimes] = useState<Map<number, number>>(new Map())
+  const [requiredIngredientIdsByProduct, setRequiredIngredientIdsByProduct] = useState<Map<number, Set<number>>>(new Map())
   const [activeTab, setActiveTab] = useState<OrdersTab>('active')
   const [selectedSale, setSelectedSale] = useState<CheckoutSale | null>(null)
   const [now, setNow] = useState<number | null>(null)
@@ -81,13 +96,26 @@ export function OrdersManager({ token }: { token?: string | null }) {
     if (showLoading) setLoading(true)
     setError('')
     try {
-      const [salesPayload, statesPayload, productsPayload] = await Promise.all([
+      const [salesPayload, statesPayload, productsPayload, recipeIngredientsPayload] = await Promise.all([
         apiRequest('/api/payments/sales', token),
         apiRequest('/api/pedido-estados', token),
         apiRequest('/api/productos', token),
+        apiRequest('/api/receta-ingredientes', token),
       ])
-      const productTimes = unwrapRows(productsPayload)
-        .map((row) => row as ProductPreparation)
+      const products = unwrapRows(productsPayload) as ProductPreparation[]
+      const recipeIngredients = unwrapRows(recipeIngredientsPayload) as RecipeIngredients[]
+      const recipeIngredientsById = new Map(recipeIngredients.map((recipe) => [recipe.receta_id, recipe.materias_primas]))
+      const requiredIdsByProduct = new Map<number, Set<number>>()
+      products.forEach((product) => {
+        if (product.receta_id === null || product.receta_id === undefined) return
+        const materials = recipeIngredientsById.get(product.receta_id)
+        if (materials) {
+          requiredIdsByProduct.set(product.id, new Set(
+            materials.filter((material) => material.requerido !== false).map((material) => material.id),
+          ))
+        }
+      })
+      const productTimes = products
         .reduce((times, product) => {
           const minutes = Number(product.tiempo_preparacion)
           if (product.tiempo_preparacion !== null && product.tiempo_preparacion !== undefined &&
@@ -99,6 +127,7 @@ export function OrdersManager({ token }: { token?: string | null }) {
       setSales(unwrapRows(salesPayload) as unknown as CheckoutSale[])
       setStates(unwrapRows(statesPayload) as unknown as PedidoEstado[])
       setPreparationTimes(productTimes)
+      setRequiredIngredientIdsByProduct(requiredIdsByProduct)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los pedidos.')
     } finally {
@@ -124,7 +153,8 @@ export function OrdersManager({ token }: { token?: string | null }) {
     return () => window.clearInterval(intervalId)
   }, [])
 
-  const activeTabConfig = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]
+  const visibleTabs = isAdministrator ? tabs : tabs.filter((tab) => tab.id !== 'cancelled')
+  const activeTabConfig = visibleTabs.find((tab) => tab.id === activeTab) ?? visibleTabs[0]
   const visibleSales = sales.filter((sale) => activeTabConfig.states.includes(sale.pedido_estado_id))
 
   const updateSaleState = (orderId: number, updatedStatus: CheckoutSaleStatusOut) => {
@@ -147,7 +177,7 @@ export function OrdersManager({ token }: { token?: string | null }) {
       </div>
 
       <div className="orders-tabs" role="tablist" aria-label="Filtrar pedidos">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const count = sales.filter((sale) => tab.states.includes(sale.pedido_estado_id)).length
           return (
             <button
@@ -178,9 +208,13 @@ export function OrdersManager({ token }: { token?: string | null }) {
                 sale={sale}
                 states={states}
                 preparationTimes={preparationTimes}
+                hideUntimedItems={activeTab === 'active'}
+                requiredIngredientIdsByProduct={requiredIngredientIdsByProduct}
                 now={now}
                 onCodeClick={() => setSelectedSale(sale)}
                 onStateUpdated={updateSaleState}
+                canCancelOrders={isAdministrator}
+                confirmStatusChange={isAdministrator}
                 token={token}
               />
             ))}
@@ -197,28 +231,44 @@ function OrderCard({
   sale,
   states,
   preparationTimes,
+  hideUntimedItems,
+  requiredIngredientIdsByProduct,
   now,
   onCodeClick,
   onStateUpdated,
+  canCancelOrders,
+  confirmStatusChange,
   token,
 }: {
   sale: CheckoutSale
   states: PedidoEstado[]
   preparationTimes: Map<number, number>
+  hideUntimedItems: boolean
+  requiredIngredientIdsByProduct: Map<number, Set<number>>
   now: number | null
   onCodeClick: () => void
   onStateUpdated: (orderId: number, updatedStatus: CheckoutSaleStatusOut) => void
+  canCancelOrders: boolean
+  confirmStatusChange: boolean
   token?: string | null
 }) {
   const [selectedStateId, setSelectedStateId] = useState(String(sale.pedido_estado_id))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmationOpen, setConfirmationOpen] = useState(false)
+  const [expandedRequiredItemIds, setExpandedRequiredItemIds] = useState<number[]>([])
 
   const maxPreparationMinutes = getMaxPreparationMinutes(sale.items, preparationTimes)
+  const hasPreparationTime = maxPreparationMinutes > 0
   const remainingSeconds = now === null
     ? null
     : getRemainingPreparationSeconds(sale.preparation_at, maxPreparationMinutes, now)
   const hasTimer = sale.pedido_estado_id === 2 && remainingSeconds !== null
+  const selectedStateLabel = states.find((state) => state.id === Number(selectedStateId))?.descripcion_es ?? `Estado ${selectedStateId}`
+  const availableStates = states.filter((state) => (
+    (hasPreparationTime || ![1, 2].includes(state.id) || state.id === sale.pedido_estado_id) &&
+    (canCancelOrders || state.id !== 5 || state.id === sale.pedido_estado_id)
+  ))
 
   const submitState = async () => {
     const nextStateId = Number(selectedStateId)
@@ -239,6 +289,14 @@ function OrderCard({
     }
   }
 
+  const handleUpdateClick = () => {
+    if (confirmStatusChange) {
+      setConfirmationOpen(true)
+      return
+    }
+    void submitState()
+  }
+
   return (
     <article className="order-card">
       <header className="order-card-header">
@@ -254,38 +312,110 @@ function OrderCard({
       </div>
 
       <ul className="order-item-list">
-        {sale.items.map((item) => (
+        {sale.items
+          .filter((item) => !hideUntimedItems || preparationTimes.has(item.product_id))
+          .map((item) => (
           <li key={item.id}>
             <div className="order-product-heading">
               <strong>{item.product_name}</strong>
               <span>× {item.quantity}</span>
             </div>
             {item.ingredients.length > 0 ? (
-              <ul className="order-ingredient-list">
-                {item.ingredients.map((ingredient) => (
-                  <li key={ingredient.materia_prima_id}>
-                    {ingredient.nombre_es ?? ingredient.nombre_en ?? `Materia prima ${ingredient.materia_prima_id}`}
-                  </li>
-                ))}
-              </ul>
+              <OrderItemIngredients
+                item={item}
+                requiredIngredientIds={requiredIngredientIdsByProduct.get(item.product_id)}
+                expanded={expandedRequiredItemIds.includes(item.id)}
+                onToggleRequired={() => setExpandedRequiredItemIds((current) => current.includes(item.id)
+                  ? current.filter((id) => id !== item.id)
+                  : [...current, item.id])}
+              />
             ) : null}
           </li>
-        ))}
+          ))}
       </ul>
 
       <div className="order-state-actions">
         <label>
           <span className="sr-only">Nuevo estado del pedido</span>
           <select value={selectedStateId} onChange={(event) => setSelectedStateId(event.target.value)} disabled={saving}>
-            {states.map((state) => <option key={state.id} value={state.id}>{state.descripcion_es}</option>)}
+            {availableStates.map((state) => <option key={state.id} value={state.id}>{state.descripcion_es}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => void submitState()} disabled={saving || states.length === 0 || Number(selectedStateId) === sale.pedido_estado_id}>
+        <button type="button" onClick={handleUpdateClick} disabled={saving || states.length === 0 || Number(selectedStateId) === sale.pedido_estado_id}>
           {saving ? 'Guardando...' : 'Actualizar'}
         </button>
       </div>
       {error ? <p className="error-message" role="alert">{error}</p> : null}
+      {confirmationOpen ? (
+        <ConfirmationDialog
+          message={`¿Confirmas cambiar el estado de ${sale.pedido_codigo ?? `Pedido #${sale.id}`} a "${selectedStateLabel}"?`}
+          confirmLabel="Confirmar"
+          onConfirm={() => {
+            setConfirmationOpen(false)
+            void submitState()
+          }}
+          onCancel={() => setConfirmationOpen(false)}
+        />
+      ) : null}
     </article>
+  )
+}
+
+function OrderItemIngredients({
+  item,
+  requiredIngredientIds,
+  expanded,
+  onToggleRequired,
+}: {
+  item: CheckoutOrderItem
+  requiredIngredientIds?: Set<number>
+  expanded: boolean
+  onToggleRequired: () => void
+}) {
+  const isRequired = (ingredient: CheckoutOrderIngredient) => requiredIngredientIds
+    ? requiredIngredientIds.has(ingredient.materia_prima_id)
+    : ingredient.requerido !== false
+  const optionalIngredients = item.ingredients.filter((ingredient) => !isRequired(ingredient))
+  const requiredIngredients = item.ingredients.filter(isRequired)
+
+  return (
+    <div className="order-ingredients">
+      {optionalIngredients.length > 0 ? (
+        <ul className="order-ingredient-list">
+          {optionalIngredients.map((ingredient) => (
+            <li key={ingredient.materia_prima_id}>
+              {ingredient.nombre_es ?? ingredient.nombre_en ?? `Materia prima ${ingredient.materia_prima_id}`}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {requiredIngredients.length > 0 ? (
+        <>
+          <button
+            type="button"
+            className="order-required-toggle"
+            onClick={onToggleRequired}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? 'Ocultar' : 'Mostrar'} ${requiredIngredients.length} materias primas requeridas de ${item.product_name}`}
+            title={expanded ? 'Ocultar materias primas requeridas' : 'Mostrar materias primas requeridas'}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d={expanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+            </svg>
+            <span>{requiredIngredients.length}</span>
+          </button>
+          {expanded ? (
+            <ul className="order-ingredient-list order-required-list">
+              {requiredIngredients.map((ingredient) => (
+                <li key={ingredient.materia_prima_id}>
+                  {ingredient.nombre_es ?? ingredient.nombre_en ?? `Materia prima ${ingredient.materia_prima_id}`}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   )
 }
 

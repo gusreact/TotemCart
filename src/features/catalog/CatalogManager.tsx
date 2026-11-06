@@ -16,10 +16,16 @@ export function CatalogManager({
   section,
   token,
   onMaterialsChange,
+  formOnly = false,
+  onCreate,
+  onClose,
 }: {
   section: CatalogResource
   token?: string | null
   onMaterialsChange?: (rows: Row[]) => void
+  formOnly?: boolean
+  onCreate?: (values: Row, savedRecord: unknown) => Promise<void>
+  onClose?: () => void
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [categories, setCategories] = useState<Row[]>([])
@@ -36,6 +42,7 @@ export function CatalogManager({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState<Row | null>(null)
+  const [createDialogSection, setCreateDialogSection] = useState<'categorias' | 'materias-primas' | 'recetas' | 'unidades-medida' | null>(null)
   const [draft, setDraft] = useState<Record<string, string | boolean>>({})
   const [imagePreview, setImagePreview] = useState('')
   const [isReplacementPreview, setIsReplacementPreview] = useState(false)
@@ -101,7 +108,7 @@ export function CatalogManager({
   }, [endpoint, onMaterialsChange, section, token])
 
   const fields = fieldDefinitions[section].map((field) => {
-    if (field.name === 'categoria_id') {
+    if (field.name === 'categoria_id' || field.name === 'categoria_sugerida') {
       return { ...field, options: categories.map((row) => ({ value: String(row.id), label: String(row.nombre_es ?? row.nombre_en ?? row.id) })) }
     }
     if (field.name === 'receta_id') {
@@ -155,7 +162,7 @@ export function CatalogManager({
       nombre_es: typeof material.nombre_es === 'string' ? material.nombre_es : undefined,
       nombre_en: typeof material.nombre_en === 'string' ? material.nombre_en : undefined,
       nombre: String(material.nombre_es ?? material.nombre_en ?? material.nombre ?? material.id),
-      unidad_medida: String(material.unidad_medida ?? ''),
+      unidad_medida: getMaterialMeasureLabel(material),
       cantidad: String(parsedQuantity),
       requerido: true,
     }])
@@ -304,7 +311,12 @@ export function CatalogManager({
       if (completedAction !== 'delete') resetForm()
       setPendingAction(null)
       setNotice(completedAction === 'create' ? 'Registro creado.' : completedAction === 'update' ? 'Cambios guardados.' : 'Registro eliminado.')
-      await refresh()
+      if (formOnly && section === 'unidades-medida' && completedAction === 'create') {
+        if (!onCreate) throw new Error('No se pudo actualizar la unidad de medida recién creada.')
+        await onCreate(Object.fromEntries(fields.map((field) => [field.name, draft[field.name]])), savedRecord)
+      } else if (!formOnly) {
+        await refresh()
+      }
     } catch (err) {
       if (recipeCreated) {
         resetForm()
@@ -335,12 +347,64 @@ export function CatalogManager({
           onCancel={() => setPendingAction(null)}
         />
       ) : null}
+      {createDialogSection ? (
+        <CatalogResourceDialog
+          section={createDialogSection}
+          token={token}
+          onClose={() => setCreateDialogSection(null)}
+          onCreate={async (values, savedRecord) => {
+            const resource = createDialogSection
+            const resourceEndpoint = sections.find((item) => item.id === resource)?.endpoint
+            if (!resourceEndpoint) throw new Error('No se pudo actualizar la lista de registros.')
+            const payload = await apiRequest(resourceEndpoint, token)
+            const nextRows = unwrapRows(payload)
+            const savedData = savedRecord && typeof savedRecord === 'object' && 'data' in savedRecord
+              ? (savedRecord as { data: unknown }).data
+              : savedRecord
+            const savedId = savedData && typeof savedData === 'object' && 'id' in savedData
+              ? String((savedData as { id: unknown }).id)
+              : undefined
+            const createdRow = nextRows.find((row) => savedId !== undefined && String(row.id) === savedId)
+              ?? nextRows.find((row) => resource === 'unidades-medida'
+                ? String(row.medida_es ?? '').trim().toLocaleLowerCase() === String(values.medida_es ?? '').trim().toLocaleLowerCase() &&
+                  String(row.medida_en ?? '').trim().toLocaleLowerCase() === String(values.medida_en ?? '').trim().toLocaleLowerCase()
+                : resource === 'recetas'
+                  ? String(row.nombre ?? '').trim().toLocaleLowerCase() === String(values.nombre ?? '').trim().toLocaleLowerCase()
+                  : String(row.nombre_es ?? '').trim().toLocaleLowerCase() === String(values.nombre_es ?? '').trim().toLocaleLowerCase() &&
+                    String(row.nombre_en ?? '').trim().toLocaleLowerCase() === String(values.nombre_en ?? '').trim().toLocaleLowerCase())
+            const resourceLabel = resource === 'unidades-medida' ? 'La unidad'
+              : resource === 'categorias' ? 'La categoría'
+                : resource === 'recetas' ? 'La receta' : 'La materia prima'
+            if (!createdRow) throw new Error(`${resourceLabel} se creó, pero no se pudo actualizar la lista.`)
+            if (createdRow.id === null || createdRow.id === undefined) {
+              throw new Error(`${resourceLabel} se creó, pero el servidor no devolvió un ID válido para seleccionarla.`)
+            }
+            if (resource === 'categorias') {
+              setCategories(nextRows)
+              setDraft((current) => ({ ...current, categoria_id: String(createdRow.id) }))
+            } else if (resource === 'recetas') {
+              setRecipes(nextRows)
+              setDraft((current) => ({ ...current, receta_id: String(createdRow.id) }))
+            } else if (resource === 'unidades-medida') {
+              setUnits(nextRows)
+              setDraft((current) => ({ ...current, unidad_medida_id: String(createdRow.id) }))
+            } else {
+              setIngredients(nextRows)
+              setSelectedMaterialId(String(createdRow.id))
+            }
+            setCreateDialogSection(null)
+          }}
+        />
+      ) : null}
 
-      <div className="section-heading catalog-section-heading">
-        <div><h1>{title}</h1></div>
-      </div>
+      {!formOnly ? (
+        <div className="section-heading catalog-section-heading">
+          <div><h1>{title}</h1></div>
+        </div>
+      ) : null}
 
-      <div className="catalog-columns">
+      <div className={formOnly ? 'catalog-form-dialog-content' : 'catalog-columns'}>
+      {!formOnly ? (
         <section className="catalog-list" aria-label={`Listado de ${title}`}>
           <div className="catalog-list-heading">
             <div><h2>Cantidad: {rows.length}</h2></div>
@@ -414,8 +478,12 @@ export function CatalogManager({
             </div>
           )}
         </section>
+      ) : null}
 
-        <section className="catalog-form" aria-label={editing ? `Editar ${title}` : `Crear ${title}`}>
+      <section className={`catalog-form${formOnly ? ' catalog-form-only' : ''}`} aria-label={editing ? `Editar ${title}` : `Crear ${title}`}>
+          {formOnly && onClose ? (
+            <button type="button" className="catalog-resource-dialog-close" onClick={onClose} aria-label="Cerrar">×</button>
+          ) : null}
           <div className="catalog-form-heading"><h2>{editing ? 'Editar' : 'Agregar'} {title.toLocaleLowerCase()}</h2></div>
           <form className="resource-form" onSubmit={handleSubmit}>
             {fields.map((field) => (
@@ -446,12 +514,53 @@ export function CatalogManager({
                       onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}
                     />
                   </>
-                ) : <><span>{field.label}</span>{field.kind === 'textarea' ? (
+                ) : <><span>{field.label}</span>{field.kind === 'select' ? (
+                  section === 'productos' && field.name === 'categoria_id' ? (
+                    <span className="unit-select-control">
+                      <select value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}>
+                        <option value="">Selecciona una opción</option>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        className="unit-add-button"
+                        onClick={() => setCreateDialogSection('categorias')}
+                        aria-label="Crear categoría"
+                        title="Crear categoría"
+                      >+</button>
+                    </span>
+                  ) : section === 'productos' && field.name === 'receta_id' ? (
+                    <span className="unit-select-control">
+                      <select value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}>
+                        <option value="">Selecciona una opción</option>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        className="unit-add-button"
+                        onClick={() => setCreateDialogSection('recetas')}
+                        aria-label="Crear receta"
+                        title="Crear receta"
+                      >+</button>
+                    </span>
+                  ) : section === 'materias-primas' && field.name === 'unidad_medida_id' ? (
+                    <span className="unit-select-control">
+                      <select value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}>
+                        <option value="">Selecciona una opción</option>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        className="unit-add-button"
+                        onClick={() => setCreateDialogSection('unidades-medida')}
+                        aria-label="Crear unidad de medida"
+                        title="Crear unidad de medida"
+                      >+</button>
+                    </span>
+                  ) : (
+                    <select value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}>
+                      <option value="">{field.name === 'categoria_sugerida' ? 'Sin categoría sugerida' : 'Selecciona una opción'}</option>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  )
+                ) : field.kind === 'textarea' ? (
                   <textarea value={String(draft[field.name] ?? '')} required={field.required} rows={4} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))} />
-                ) : field.kind === 'select' ? (
-                  <select value={String(draft[field.name] ?? '')} required={field.required} onChange={(event) => setDraft((current) => ({ ...current, [field.name]: event.target.value }))}>
-                    <option value="">Selecciona una opción</option>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
                 ) : field.kind === 'file' ? (
                   <>
                     {(section === 'categorias' || section === 'productos') && editing && imagePreview ? (
@@ -499,6 +608,7 @@ export function CatalogManager({
                 selectedMaterialId={selectedMaterialId}
                 quantity={materialQuantity}
                 onMaterialChange={setSelectedMaterialId}
+                onCreateMaterial={() => setCreateDialogSection('materias-primas')}
                 onQuantityChange={setMaterialQuantity}
                 onAdd={addRecipeMaterial}
                 onRequiredChange={(id, requerido) => setDraftMaterials((current) => current.map((material) => (
@@ -514,9 +624,55 @@ export function CatalogManager({
               {editing ? <button type="button" className="secondary-button" onClick={resetForm}>Cancelar</button> : null}
             </div>
           </form>
-        </section>
+      </section>
       </div>
     </>
+  )
+}
+
+function CatalogResourceDialog({
+  section,
+  token,
+  onClose,
+  onCreate,
+}: {
+  section: 'categorias' | 'materias-primas' | 'recetas' | 'unidades-medida'
+  token?: string | null
+  onClose: () => void
+  onCreate: (values: Row, savedRecord: unknown) => Promise<void>
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    dialog.showModal()
+    return () => {
+      if (dialog.open) dialog.close()
+    }
+  }, [])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="catalog-resource-dialog"
+      aria-label={`Crear ${sections.find((item) => item.id === section)?.label.toLocaleLowerCase() ?? 'registro'}`}
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) onClose()
+      }}
+    >
+      <CatalogManager
+        section={section}
+        token={token}
+        formOnly
+        onCreate={onCreate}
+        onClose={onClose}
+      />
+    </dialog>
   )
 }
 
@@ -526,6 +682,7 @@ function RecipeMaterialsEditor({
   selectedMaterialId,
   quantity,
   onMaterialChange,
+  onCreateMaterial,
   onQuantityChange,
   onAdd,
   onRequiredChange,
@@ -536,6 +693,7 @@ function RecipeMaterialsEditor({
   selectedMaterialId: string
   quantity: string
   onMaterialChange: (value: string) => void
+  onCreateMaterial: () => void
   onQuantityChange: (value: string) => void
   onAdd: () => void
   onRequiredChange: (id: number, requerido: boolean) => void
@@ -547,10 +705,21 @@ function RecipeMaterialsEditor({
       <div className="recipe-material-add-row">
         <label>
           <span>Materia prima</span>
-          <select value={selectedMaterialId} onChange={(event) => onMaterialChange(event.target.value)}>
-            <option value="">Selecciona una materia prima</option>
-            {materials.map((material) => <option key={String(material.id)} value={String(material.id)}>{String(material.nombre_es ?? material.nombre_en ?? material.nombre ?? material.id)} ({String(material.unidad_medida ?? '')})</option>)}
-          </select>
+          <span className="recipe-material-select-control">
+            <select value={selectedMaterialId} onChange={(event) => onMaterialChange(event.target.value)}>
+              <option value="">Selecciona una materia prima</option>
+              {materials.map((material) => {
+                const measureLabel = getMaterialMeasureLabel(material)
+                return (
+                  <option key={String(material.id)} value={String(material.id)}>
+                    {String(material.nombre_es ?? material.nombre_en ?? material.nombre ?? material.id)}
+                    {measureLabel ? ` (${measureLabel})` : ''}
+                  </option>
+                )
+              })}
+            </select>
+            <button type="button" className="add-material-button" onClick={onCreateMaterial} aria-label="Crear materia prima" title="Crear materia prima">+</button>
+          </span>
         </label>
         <label>
           <span>Cantidad</span>
@@ -579,4 +748,10 @@ function RecipeMaterialsEditor({
       </ul>
     </div>
   )
+}
+
+function getMaterialMeasureLabel(material: Row) {
+  const label = [material.medida_es, material.medida_en, material.unidad_medida]
+    .find((value) => typeof value === 'string' && value.trim())
+  return typeof label === 'string' ? label : ''
 }

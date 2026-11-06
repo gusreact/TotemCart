@@ -12,6 +12,7 @@ type StoreCategory = {
 type StoreProduct = {
   id: number
   categoria_id: number
+  categoria_sugerida?: number | null
   receta_id?: number | null
   nombre_es: string
   nombre_en: string
@@ -96,6 +97,9 @@ const copy = {
     emptyCart: 'Todavía no agregaste productos.',
     total: 'Total',
     closeCart: 'Cerrar carrito',
+    suggestedProductsTitle: 'También te puede gustar',
+    suggestedProductsClose: 'Cerrar recomendaciones',
+    suggestedProductsAdd: 'Agregar',
     customTitle: 'Personaliza tu pedido',
     customDescription: 'Elige qué ingredientes opcionales incluir.',
     required: 'Requerido',
@@ -131,6 +135,9 @@ const copy = {
     emptyCart: 'You have not added any products yet.',
     total: 'Total',
     closeCart: 'Close cart',
+    suggestedProductsTitle: 'You may also like',
+    suggestedProductsClose: 'Close recommendations',
+    suggestedProductsAdd: 'Add',
     customTitle: 'Customize your order',
     customDescription: 'Choose which optional ingredients to include.',
     required: 'Required',
@@ -170,6 +177,7 @@ export default function Storefront() {
   const [flippedProductIds, setFlippedProductIds] = useState<number[]>([])
   const [cartLines, setCartLines] = useState<CartLine[]>(readStoredCart)
   const [cartOpen, setCartOpen] = useState(false)
+  const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null)
   const [checkoutError, setCheckoutError] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
   const [customizingProduct, setCustomizingProduct] = useState<StoreProduct | null>(null)
@@ -243,6 +251,12 @@ export default function Storefront() {
     }
   }, [cartLines])
 
+  useEffect(() => {
+    const handlePageShow = () => setCheckingOut(false)
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [])
+
   const startCheckout = async () => {
     if (checkingOut || cartLines.length === 0) return
     setCheckingOut(true)
@@ -304,6 +318,16 @@ export default function Storefront() {
   const addConfiguredProduct = (product: StoreProduct, materiaPrimaIds: number[], source?: HTMLButtonElement) => {
     if (source) animateCartAddition(source)
     const sortedMateriaPrimaIds = [...new Set(materiaPrimaIds)].sort((a, b) => a - b)
+    const suggestedCategoryId = product.categoria_sugerida
+    const suggestedCategoryAlreadyInCart = suggestedCategoryId !== null &&
+      suggestedCategoryId !== undefined &&
+      (product.categoria_id === suggestedCategoryId || cartLines.some((line) => (
+        products.find((cartProduct) => cartProduct.id === line.product_id)?.categoria_id === suggestedCategoryId
+      )))
+    if (suggestedCategoryId !== null && suggestedCategoryId !== undefined && !suggestedCategoryAlreadyInCart &&
+      availableProducts.some((item) => item.categoria_id === suggestedCategoryId)) {
+      setSuggestedCategoryId(suggestedCategoryId)
+    }
     setCartLines((current) => {
       const matchingLine = current.find((line) => (
         line.product_id === product.id &&
@@ -361,6 +385,12 @@ export default function Storefront() {
   const productQuantityInCart = (productId: number) => cartLines
     .filter((line) => line.product_id === productId)
     .reduce((total, line) => total + line.quantity, 0)
+  const suggestedCategory = suggestedCategoryId === null
+    ? undefined
+    : categories.find((category) => category.id === suggestedCategoryId)
+  const suggestedProducts = suggestedCategoryId === null
+    ? []
+    : availableProducts.filter((product) => product.categoria_id === suggestedCategoryId)
 
   const ingredientName = (ingredient: RecipeIngredient) => language === 'en'
     ? ingredient.nombre_en ?? ingredient.nombre_es ?? ingredient.nombre ?? String(ingredient.id)
@@ -429,6 +459,7 @@ export default function Storefront() {
               language={language}
               setLanguage={updateLanguage}
               onBack={returnToCategories}
+              onBrandClick={returnToCategories}
               backLabel={text.back}
             />
             <div className="storefront-heading">
@@ -627,14 +658,74 @@ export default function Storefront() {
           </section>
         </div>
       ) : null}
+      {suggestedCategoryId !== null ? (
+        <div className="suggested-products-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSuggestedCategoryId(null)
+        }}>
+          <section
+            className="suggested-products-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="suggested-products-title"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setSuggestedCategoryId(null)
+            }}
+            tabIndex={-1}
+          >
+            <header className="cart-dialog-header">
+              <div>
+                <p className="storefront-kicker">{text.suggestedProductsTitle}</p>
+                <h2 id="suggested-products-title">
+                  {suggestedCategory
+                    ? language === 'es' ? suggestedCategory.nombre_es : suggestedCategory.nombre_en
+                    : text.products}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="cart-close-button"
+                onClick={() => setSuggestedCategoryId(null)}
+                aria-label={text.suggestedProductsClose}
+              >×</button>
+            </header>
+            <ul className="suggested-products-list">
+              {suggestedProducts.map((product) => {
+                const productName = language === 'es' ? product.nombre_es : product.nombre_en
+                return (
+                  <li key={product.id}>
+                    {product.imagen_url
+                      ? <img src={product.imagen_url} alt="" />
+                      : <span className="cart-item-placeholder" aria-hidden="true">TC</span>}
+                    <div className="suggested-product-details">
+                      <strong>{productName}</strong>
+                      <span>{formatPrice(Number(product.precio))}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="suggested-product-add"
+                      onClick={(event) => {
+                        setSuggestedCategoryId(null)
+                        beginAddProduct(product, event.currentTarget)
+                      }}
+                    >
+                      {text.suggestedProductsAdd}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        </div>
+      ) : null}
     </main>
   )
 }
 
-function LogoAndLanguage({ language, setLanguage, onBack, backLabel }: {
+function LogoAndLanguage({ language, setLanguage, onBack, onBrandClick, backLabel }: {
   language: Language
   setLanguage: (language: Language) => void
   onBack?: () => void
+  onBrandClick?: () => void
   backLabel?: string
 }) {
   return (
@@ -645,10 +736,17 @@ function LogoAndLanguage({ language, setLanguage, onBack, backLabel }: {
         </button>
       ) : <span aria-hidden="true" />}
       <div className="current-language">
-        <Link className="storefront-brand" to="/" aria-label="TotemCart home">
-          <span className="storefront-brand-mark">T</span>
-          <span>TotemCart</span>
-        </Link>
+        {onBrandClick ? (
+          <button type="button" className="storefront-brand storefront-brand-button" onClick={onBrandClick} aria-label={backLabel}>
+            <span className="storefront-brand-mark">T</span>
+            <span>TotemCart</span>
+          </button>
+        ) : (
+          <Link className="storefront-brand" to="/" aria-label="TotemCart home">
+            <span className="storefront-brand-mark">T</span>
+            <span>TotemCart</span>
+          </Link>
+        )}
       </div>
       <button type="button" className="language-switch" onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}>
         <img src={language === 'es' ? 'https://flagcdn.com/w40/us.png' : 'https://flagcdn.com/w40/es.png'} alt="" />

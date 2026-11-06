@@ -69,6 +69,7 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
   ],
   productos: [
     { name: 'categoria_id', label: 'Categoría', kind: 'select', required: true },
+    { name: 'categoria_sugerida', label: 'Venta Sugerida', kind: 'select' },
     { name: 'receta_id', label: 'Receta', kind: 'select' },
     { name: 'nombre_es', label: 'Nombre en español', kind: 'text', required: true },
     { name: 'nombre_en', label: 'Nombre en inglés', kind: 'text', required: true },
@@ -113,6 +114,7 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
   productos: [
     { name: 'nombre_es', label: 'Producto' },
     { name: 'categoria_nombre_es', label: 'Categoría' },
+    { name: 'categoria_sugerida_nombre_es', label: 'Categoría Sugerida' },
     { name: 'precio', label: 'Precio' },
     { name: 'tiempo_preparacion', label: 'Minutos' },
     { name: 'disponible', label: 'Disponible' },

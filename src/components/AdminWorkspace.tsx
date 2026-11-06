@@ -17,7 +17,9 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
   const isAdministrator = Number(roleId) === 1
   const isCook = Number(roleId) === 2
   const visibleSections = useMemo(
-    () => isAdministrator ? sections : isCook ? sections.filter((section) => section.id === 'pedidos') : [],
+    () => isAdministrator
+      ? sections.filter((section) => section.id !== 'roles')
+      : isCook ? sections.filter((section) => section.id === 'pedidos') : [],
     [isAdministrator, isCook],
   )
   const [activeSection, setActiveSection] = useState<AdminSection>(isCook ? 'pedidos' : 'categorias')
@@ -118,7 +120,7 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
           {visibleSections.length === 0 ? (
             <p className="error-message" role="alert">No se pudo identificar el rol de este usuario. Cierra sesión e inicia nuevamente.</p>
           ) : currentSection === 'pedidos' ? (
-            <OrdersManager token={token} />
+            <OrdersManager token={token} isAdministrator={isAdministrator} />
           ) : currentSection === 'usuarios' ? (
             <>
               <div className="section-heading">
