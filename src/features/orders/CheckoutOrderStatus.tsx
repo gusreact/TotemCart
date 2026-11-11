@@ -45,9 +45,14 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
   const [preparationTimes, setPreparationTimes] = useState<Map<number, number>>(new Map())
   const [now, setNow] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [statusError, setStatusError] = useState('')
-  const [timerError, setTimerError] = useState(false)
+  const [fetchError, setFetchError] = useState('')
   const text = messages[language]
+
+  useEffect(() => {
+    if (!fetchError) return
+    const timeoutId = window.setTimeout(() => setFetchError(''), 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchError])
 
   useEffect(() => {
     let active = true
@@ -63,11 +68,11 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
         )
         if (active) {
           setSale(payload as CheckoutSaleByCode)
-          setStatusError('')
+          setFetchError('')
         }
       } catch (error) {
         if (active) {
-          setStatusError(error instanceof Error ? error.message : text.statusError)
+          setFetchError(error instanceof Error ? error.message : text.statusError)
         }
       } finally {
         refreshing = false
@@ -88,8 +93,8 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
           return result
         }, new Map<number, number>())
         if (active) setPreparationTimes(times)
-      } catch {
-        if (active) setTimerError(true)
+      } catch (error) {
+        if (active) setFetchError(error instanceof Error ? error.message : text.timerError)
       }
     }
 
@@ -103,7 +108,7 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
       window.clearInterval(statusInterval)
       window.clearInterval(timerInterval)
     }
-  }, [pedidoCodigo, text.statusError])
+  }, [pedidoCodigo, text.statusError, text.timerError])
 
   const orderStatus = sale?.pedido_estado?.[language === 'es' ? 'descripcion_es' : 'descripcion_en']
     ?? (sale ? `Estado ${sale.pedido_estado_id}` : '')
@@ -113,27 +118,31 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
     : null
 
   return (
-    <aside className="checkout-order-status" aria-live="polite">
-      <h2>{text.title}</h2>
-      {loading && !sale ? <p>{text.loading}</p> : null}
-      {sale ? (
-        <div className="checkout-order-status-line">
-          <span>{text.status}</span>
-          <strong>{orderStatus}</strong>
+    <>
+      {fetchError ? (
+        <div className="storefront-fetch-error" role="alert" aria-live="assertive">
+          <span>{fetchError}</span>
+          <button type="button" onClick={() => setFetchError('')} aria-label={language === 'es' ? 'Cerrar aviso' : 'Dismiss alert'}>×</button>
         </div>
       ) : null}
-      {sale?.pedido_estado_id === 2 && remainingSeconds !== null ? (
-        <div className="checkout-preparation-timer">
-          <span>{text.preparationTime}</span>
-          <time className={`order-timer${remainingSeconds === 0 ? ' is-finished' : ''}`} aria-label={text.preparationTime}>
-            {formatDuration(remainingSeconds)}
-          </time>
-        </div>
-      ) : null}
-      {statusError ? <p className="checkout-order-status-error" role="alert">{statusError}</p> : null}
-      {sale?.pedido_estado_id === 2 && remainingSeconds === null && timerError ? (
-        <p className="checkout-order-status-error" role="alert">{text.timerError}</p>
-      ) : null}
-    </aside>
+      <aside className="checkout-order-status" aria-live="polite">
+        <h2>{text.title}</h2>
+        {loading && !sale ? <p>{text.loading}</p> : null}
+        {sale ? (
+          <div className="checkout-order-status-line">
+            <span>{text.status}</span>
+            <strong>{orderStatus}</strong>
+          </div>
+        ) : null}
+        {sale?.pedido_estado_id === 2 && remainingSeconds !== null ? (
+          <div className="checkout-preparation-timer">
+            <span>{text.preparationTime}</span>
+            <time className={`order-timer${remainingSeconds === 0 ? ' is-finished' : ''}`} aria-label={text.preparationTime}>
+              {formatDuration(remainingSeconds)}
+            </time>
+          </div>
+        ) : null}
+      </aside>
+    </>
   )
 }

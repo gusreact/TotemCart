@@ -185,6 +185,11 @@ export default function Storefront() {
   const customizationSourceRef = useRef<HTMLButtonElement | null>(null)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
 
+  const reconcileCartProducts = (menuProducts: StoreProduct[]) => {
+    const productIds = new Set(menuProducts.map((product) => product.id))
+    setCartLines((current) => current.filter((line) => productIds.has(line.product_id)))
+  }
+
   const loadMenu = async () => {
     setLoading(true)
     setError('')
@@ -192,6 +197,7 @@ export default function Storefront() {
       const data = await fetchStorefrontData()
       setCategories(data.categories)
       setProducts(data.products)
+      reconcileCartProducts(data.products)
       setRecipes(data.recipes)
       setRecipeIngredients(data.recipeIngredients)
     } catch (loadError) {
@@ -209,6 +215,7 @@ export default function Storefront() {
         if (!active) return
         setCategories(data.categories)
         setProducts(data.products)
+        reconcileCartProducts(data.products)
         setRecipes(data.recipes)
         setRecipeIngredients(data.recipeIngredients)
       } catch (loadError) {

@@ -209,6 +209,7 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
                 states={states}
                 preparationTimes={preparationTimes}
                 hideUntimedItems={activeTab === 'active'}
+                lockDeliveredState={!isAdministrator && activeTab === 'delivered'}
                 requiredIngredientIdsByProduct={requiredIngredientIdsByProduct}
                 now={now}
                 onCodeClick={() => setSelectedSale(sale)}
@@ -232,6 +233,7 @@ function OrderCard({
   states,
   preparationTimes,
   hideUntimedItems,
+  lockDeliveredState,
   requiredIngredientIdsByProduct,
   now,
   onCodeClick,
@@ -244,6 +246,7 @@ function OrderCard({
   states: PedidoEstado[]
   preparationTimes: Map<number, number>
   hideUntimedItems: boolean
+  lockDeliveredState: boolean
   requiredIngredientIdsByProduct: Map<number, Set<number>>
   now: number | null
   onCodeClick: () => void
@@ -265,7 +268,9 @@ function OrderCard({
     : getRemainingPreparationSeconds(sale.preparation_at, maxPreparationMinutes, now)
   const hasTimer = sale.pedido_estado_id === 2 && remainingSeconds !== null
   const selectedStateLabel = states.find((state) => state.id === Number(selectedStateId))?.descripcion_es ?? `Estado ${selectedStateId}`
-  const availableStates = states.filter((state) => (
+  const availableStates = lockDeliveredState
+    ? states.filter((state) => state.id === sale.pedido_estado_id)
+    : states.filter((state) => (
     (hasPreparationTime || ![1, 2].includes(state.id) || state.id === sale.pedido_estado_id) &&
     (canCancelOrders || state.id !== 5 || state.id === sale.pedido_estado_id)
   ))
@@ -337,13 +342,15 @@ function OrderCard({
       <div className="order-state-actions">
         <label>
           <span className="sr-only">Nuevo estado del pedido</span>
-          <select value={selectedStateId} onChange={(event) => setSelectedStateId(event.target.value)} disabled={saving}>
+          <select value={selectedStateId} onChange={(event) => setSelectedStateId(event.target.value)} disabled={saving || lockDeliveredState}>
             {availableStates.map((state) => <option key={state.id} value={state.id}>{state.descripcion_es}</option>)}
           </select>
         </label>
-        <button type="button" onClick={handleUpdateClick} disabled={saving || states.length === 0 || Number(selectedStateId) === sale.pedido_estado_id}>
-          {saving ? 'Guardando...' : 'Actualizar'}
-        </button>
+        {!lockDeliveredState ? (
+          <button type="button" onClick={handleUpdateClick} disabled={saving || states.length === 0 || Number(selectedStateId) === sale.pedido_estado_id}>
+            {saving ? 'Guardando...' : 'Actualizar'}
+          </button>
+        ) : null}
       </div>
       {error ? <p className="error-message" role="alert">{error}</p> : null}
       {confirmationOpen ? (
@@ -455,8 +462,6 @@ function SaleDetailsDialog({ sale, onClose }: { sale: CheckoutSale; onClose: () 
         <div><dt>Payment ID</dt><dd>{sale.payment_id ?? '—'}</dd></div>
         <div><dt>Total</dt><dd>{total}</dd></div>
         <div><dt>Estado del pago</dt><dd>{sale.payment_status}</dd></div>
-        <div><dt>Referencia externa</dt><dd>{sale.external_reference}</dd></div>
-        <div><dt>Preference ID</dt><dd>{sale.preference_id ?? '—'}</dd></div>
         <div><dt>Identificación del pagador</dt><dd>{sale.payer_identification_number ?? '—'}</dd></div>
         <div><dt>Creado</dt><dd>{formatDate(sale.created_at)}</dd></div>
         <div><dt>Pagado</dt><dd>{formatDate(sale.paid_at)}</dd></div>

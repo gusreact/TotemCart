@@ -99,7 +99,6 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
     { name: 'nombre_en', label: 'Nombre en inglés', kind: 'text', required: true },
   ],
   'pedido-estados': [
-    { name: 'id', label: 'ID (1–5)', kind: 'number', required: true, createOnly: true, min: 1, max: 5 },
     { name: 'descripcion_es', label: 'Descripción en español', kind: 'text', required: true, maxLength: 50 },
     { name: 'descripcion_en', label: 'Descripción en inglés', kind: 'text', required: true, maxLength: 50 },
   ],

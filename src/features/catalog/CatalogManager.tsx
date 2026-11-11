@@ -43,7 +43,10 @@ export function CatalogManager({
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState<Row | null>(null)
   const [createDialogSection, setCreateDialogSection] = useState<'categorias' | 'materias-primas' | 'recetas' | 'unidades-medida' | null>(null)
-  const [draft, setDraft] = useState<Record<string, string | boolean>>({})
+  const [draft, setDraft] = useState<Record<string, string | boolean>>({
+    disponible: true,
+    tiempo_preparacion_enabled: false,
+  })
   const [imagePreview, setImagePreview] = useState('')
   const [isReplacementPreview, setIsReplacementPreview] = useState(false)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
@@ -436,7 +439,8 @@ export function CatalogManager({
                           <div className={`table-actions${section === 'recetas' ? ' recipe-table-actions' : ''}`}>
                             <div className="table-actions-primary">
                               <button type="button" className="text-action" onClick={() => beginEdit(row)}>Editar</button>
-                              {section !== 'roles' || row.inmutable !== true ? (
+                              {(section !== 'roles' || row.inmutable !== true) &&
+                              !(section === 'pedido-estados' && Number(row.id) >= 1 && Number(row.id) <= 5) ? (
                                 <button type="button" className="text-action delete-action" onClick={() => handleDelete(row)}>Eliminar</button>
                               ) : null}
                             </div>
