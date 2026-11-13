@@ -112,7 +112,7 @@ const copy = {
   },
   en: {
     kicker: 'Good food, made simple',
-    title: 'What are you craving?',
+    title: 'What do you like?',
     chooseLanguage: 'Choose your language',
     categories: 'Categories',
     products: 'Products',
