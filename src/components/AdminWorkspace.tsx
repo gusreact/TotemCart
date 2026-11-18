@@ -62,7 +62,7 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
       <header className="admin-topbar">
         <a className="admin-brand" href="#admin" aria-label="TotemCart administración">
           <span className="brand-mark">T</span>
-          <span>TotemCart <small>ADMIN</small></span>
+          <span>otemCart <small>ADMIN</small></span>
         </a>
         <div className="admin-account">
           {isAdministrator && lowStockMaterials.length > 0 ? (

@@ -383,7 +383,6 @@
 .storefront-brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
   color: var(--store-ink);
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 1.05rem;
@@ -1641,7 +1640,7 @@
 .admin-brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
   color: #1c2926;
   font-size: 1.05rem;
   font-weight: 800;
@@ -3215,7 +3214,7 @@
   }
 
   .admin-brand {
-    gap: 8px;
+
     font-size: 0.9rem;
   }
 

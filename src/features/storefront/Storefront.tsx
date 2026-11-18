@@ -434,7 +434,7 @@ export default function Storefront() {
             <p className="storefront-kicker">
               <Link className="storefront-brand" to="/" aria-label="TotemCart home">
                 <span className="storefront-brand-mark">T</span>
-                <span>TotemCart</span>
+                <span>otemCart</span>
               </Link>
               <span> · {copy.es.kicker}</span>
               <span> · {copy.en.kicker}</span>
@@ -753,12 +753,12 @@ function LogoAndLanguage({ language, setLanguage, onBack, onBrandClick, backLabe
         {onBrandClick ? (
           <button type="button" className="storefront-brand storefront-brand-button" onClick={onBrandClick} aria-label={backLabel}>
             <span className="storefront-brand-mark">T</span>
-            <span>TotemCart</span>
+            <span>otemCart</span>
           </button>
         ) : (
           <Link className="storefront-brand" to="/" aria-label="TotemCart home">
             <span className="storefront-brand-mark">T</span>
-            <span>TotemCart</span>
+            <span>otemCart</span>
           </Link>
         )}
       </div>

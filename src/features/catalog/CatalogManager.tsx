@@ -316,8 +316,8 @@ export function CatalogManager({
       if (completedAction !== 'delete') resetForm()
       setPendingAction(null)
       setNotice(completedAction === 'create' ? 'Registro creado.' : completedAction === 'update' ? 'Cambios guardados.' : 'Registro eliminado.')
-      if (formOnly && section === 'unidades-medida' && completedAction === 'create') {
-        if (!onCreate) throw new Error('No se pudo actualizar la unidad de medida recién creada.')
+      if (formOnly && completedAction === 'create') {
+        if (!onCreate) throw new Error(`No se pudo actualizar la lista de ${title.toLocaleLowerCase()} recién creada.`)
         await onCreate(Object.fromEntries(fields.map((field) => [field.name, draft[field.name]])), savedRecord)
       } else if (!formOnly) {
         await refresh()
@@ -732,14 +732,20 @@ function RecipeMaterialsEditor({
                 )
               })}
             </select>
-            <button type="button" className="add-material-button" onClick={onCreateMaterial} aria-label="Crear materia prima" title="Crear materia prima">+</button>
+            <button
+              type="button"
+              className="add-material-button"
+              onClick={onCreateMaterial}
+              aria-label="Crear materia prima"
+              title="Crear materia prima"
+            >+</button>
           </span>
         </label>
         <label>
           <span>Cantidad</span>
           <input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => onQuantityChange(event.target.value)} />
         </label>
-        <button type="button" className="add-material-button" onClick={onAdd} aria-label="Agregar materia prima a la receta" title="Agregar materia prima">+</button>
+        <button type="button" className="add-material-button" onClick={onAdd} disabled={!selectedMaterialId} aria-label="Agregar materia prima a la receta" title="Agregar materia prima">+</button>
       </div>
       <ul className="recipe-material-edit-list">
         {draft.map((material) => (
