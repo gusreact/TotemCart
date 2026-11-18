@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmationDialog } from '../../components/ConfirmationDialog'
+import { ErrorDialog } from '../../components/ErrorDialog'
+import { useRefreshInterval } from '../../hooks/useRefreshInterval'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { formatDuration, getMaxPreparationMinutes, getRemainingPreparationSeconds } from './orderTimer'
 
@@ -88,6 +90,7 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const ordersRequestInProgress = useRef(false)
+  const { intervalMs, error: refreshIntervalError, clearError, reload } = useRefreshInterval(token)
 
   const loadOrders = useCallback(async (showLoading = true) => {
     if (ordersRequestInProgress.current) return
@@ -142,11 +145,12 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
   }, [loadOrders])
 
   useEffect(() => {
+    if (intervalMs === null) return
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === 'visible') void loadOrders(false)
-    }, 30_000)
+    }, intervalMs)
     return () => window.clearInterval(intervalId)
-  }, [loadOrders])
+  }, [intervalMs, loadOrders])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000)
@@ -171,6 +175,17 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
 
   return (
     <div className="orders-manager">
+      {error || refreshIntervalError ? (
+        <ErrorDialog
+          message={[error, refreshIntervalError].filter(Boolean).join('\n\n')}
+          onClose={() => {
+            setError('')
+            clearError()
+          }}
+          onRetry={refreshIntervalError ? () => void reload() : undefined}
+          retryLabel={refreshIntervalError ? 'Reintentar' : undefined}
+        />
+      ) : null}
       <div className="section-heading">
         <div><p className="eyebrow">Administración</p><h1>Pedidos</h1></div>
         <button className="icon-action" type="button" onClick={() => void loadOrders()} disabled={refreshing} aria-label="Actualizar pedidos" title="Actualizar">↻</button>
@@ -197,7 +212,6 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
       </div>
 
       <section id="orders-panel" className="orders-panel" role="tabpanel" aria-labelledby={`orders-tab-${activeTab}`}>
-        {error ? <p className="error-message" role="alert">{error}</p> : null}
         {loading ? <p className="catalog-state">Cargando pedidos...</p> : visibleSales.length === 0 ? (
           <p className="catalog-state">{activeTabConfig.empty}</p>
         ) : (
@@ -214,6 +228,7 @@ export function OrdersManager({ token, isAdministrator = false }: { token?: stri
                 now={now}
                 onCodeClick={() => setSelectedSale(sale)}
                 onStateUpdated={updateSaleState}
+                onError={setError}
                 canCancelOrders={isAdministrator}
                 confirmStatusChange={isAdministrator}
                 token={token}
@@ -238,6 +253,7 @@ function OrderCard({
   now,
   onCodeClick,
   onStateUpdated,
+  onError,
   canCancelOrders,
   confirmStatusChange,
   token,
@@ -251,13 +267,13 @@ function OrderCard({
   now: number | null
   onCodeClick: () => void
   onStateUpdated: (orderId: number, updatedStatus: CheckoutSaleStatusOut) => void
+  onError: (message: string) => void
   canCancelOrders: boolean
   confirmStatusChange: boolean
   token?: string | null
 }) {
   const [selectedStateId, setSelectedStateId] = useState(String(sale.pedido_estado_id))
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [expandedRequiredItemIds, setExpandedRequiredItemIds] = useState<number[]>([])
 
@@ -279,7 +295,7 @@ function OrderCard({
     const nextStateId = Number(selectedStateId)
     if (!Number.isInteger(nextStateId) || nextStateId === sale.pedido_estado_id) return
     setSaving(true)
-    setError('')
+    onError('')
     try {
       const payload = await apiRequest(`/api/payments/sales/${sale.id}/estado`, token, {
         method: 'PATCH',
@@ -288,7 +304,7 @@ function OrderCard({
       const updatedStatus = payload as CheckoutSaleStatusOut
       onStateUpdated(sale.id, updatedStatus)
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'No se pudo actualizar el estado del pedido.')
+      onError(updateError instanceof Error ? updateError.message : 'No se pudo actualizar el estado del pedido.')
     } finally {
       setSaving(false)
     }
@@ -352,7 +368,6 @@ function OrderCard({
           </button>
         ) : null}
       </div>
-      {error ? <p className="error-message" role="alert">{error}</p> : null}
       {confirmationOpen ? (
         <ConfirmationDialog
           message={`¿Confirmas cambiar el estado de ${sale.pedido_codigo ?? `Pedido #${sale.id}`} a "${selectedStateLabel}"?`}

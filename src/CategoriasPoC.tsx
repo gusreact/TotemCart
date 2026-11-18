@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ErrorDialog } from './components/ErrorDialog';
 
 const API_BASE_URL = import.meta.env.RENDER_API_DOMAIN;
 const RENDER_API_URL = `${API_BASE_URL}/api/categorias`;
@@ -28,7 +29,7 @@ export default function CategoriaPoC() {
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!file) {
-      alert("Por favor selecciona una imagen");
+      setError("Por favor selecciona una imagen");
       return;
     }
 
@@ -133,12 +134,7 @@ export default function CategoriaPoC() {
         </div>
       )}
 
-      {error && (
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#ffe6e6', border: '1px solid #cc0000' }}>
-          <h4>❌ Error:</h4>
-          <p>{error}</p>
-        </div>
-      )}
+      {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
     </div>
   );
 }

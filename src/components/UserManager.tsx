@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiRequest, unwrapRows } from '../services/apiClient'
 import { ConfirmationDialog } from './ConfirmationDialog'
+import { ErrorDialog } from './ErrorDialog'
 import { useUsers } from '../hooks/useUsers'
 import type { User, UserCreatePayload, UserUpdatePayload } from '../types/user'
 
@@ -30,10 +31,11 @@ const emptyForm: UserFormState = {
 }
 
 export function UserManager({ token }: { token?: string | null }) {
-  const { users, loading, error, reload, createUser, updateUser, deleteUser } = useUsers(token)
+  const { users, loading, error, clearError, reload, createUser, updateUser, deleteUser } = useUsers(token)
   const [roles, setRoles] = useState<Role[]>([])
   const [rolesLoading, setRolesLoading] = useState(true)
   const [rolesError, setRolesError] = useState('')
+  const [rolesErrorDismissed, setRolesErrorDismissed] = useState(false)
   const [form, setForm] = useState<UserFormState>(emptyForm)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formError, setFormError] = useState('')
@@ -42,12 +44,27 @@ export function UserManager({ token }: { token?: string | null }) {
   const [confirmation, setConfirmation] = useState<UserConfirmation | null>(null)
 
   const totalUsers = useMemo(() => users.length, [users])
+  const activeErrors = [
+    rolesError && !rolesErrorDismissed ? `No se pudieron cargar los roles: ${rolesError}` : '',
+    !rolesLoading && !rolesError && roles.length === 0 && !rolesErrorDismissed
+      ? 'No hay roles disponibles. Crea un rol antes de asignarlo.'
+      : '',
+    formError,
+    error,
+  ].filter(Boolean)
+
+  const dismissErrors = () => {
+    setRolesErrorDismissed(true)
+    setFormError('')
+    clearError()
+  }
 
   useEffect(() => {
     let active = true
     const loadRoles = async () => {
       setRolesLoading(true)
       setRolesError('')
+      setRolesErrorDismissed(false)
       try {
         const payload = await apiRequest('/api/roles', token)
         if (active) setRoles(unwrapRows(payload) as Role[])
@@ -158,6 +175,9 @@ export function UserManager({ token }: { token?: string | null }) {
           onCancel={() => setConfirmation(null)}
         />
       ) : null}
+      {activeErrors.length > 0 ? (
+        <ErrorDialog message={activeErrors.join('\n\n')} onClose={dismissErrors} />
+      ) : null}
       <section className="catalog-form user-editor">
         <div className="catalog-form-heading">
           <h2>{editingId !== null ? 'Editar usuario' : 'Crear usuario'}</h2>
@@ -213,10 +233,6 @@ export function UserManager({ token }: { token?: string | null }) {
           </select>
         </label>
 
-        {rolesError ? <p className="error-message" role="alert">No se pudieron cargar los roles: {rolesError}</p> : null}
-        {!rolesLoading && !rolesError && roles.length === 0 ? <p className="error-message" role="alert">No hay roles disponibles. Crea un rol antes de asignarlo.</p> : null}
-
-        {formError ? <p className="error-message">{formError}</p> : null}
         {successMessage ? <p className="success-message">{successMessage}</p> : null}
 
         <div className="resource-form-actions">
@@ -247,8 +263,6 @@ export function UserManager({ token }: { token?: string | null }) {
           <div><h2>Usuarios</h2><span>{totalUsers} usuarios</span></div>
           <button className="icon-action" type="button" onClick={() => void reload()} aria-label="Actualizar usuarios" title="Actualizar">↻</button>
         </div>
-
-        {error ? <p className="error-message">{error}</p> : null}
 
         {loading ? <p className="catalog-state">Cargando usuarios...</p> : users.length === 0 ? (
           <p className="catalog-state">No hay usuarios registrados.</p>

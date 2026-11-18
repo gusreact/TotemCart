@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
+import { ErrorDialog } from '../../components/ErrorDialog'
+import { useRefreshInterval } from '../../hooks/useRefreshInterval'
 import type { Language } from '../storefront/language'
 import { formatDuration, getMaxPreparationMinutes, getRemainingPreparationSeconds } from './orderTimer'
 
@@ -46,13 +48,8 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
   const [now, setNow] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState('')
+  const { intervalMs, error: refreshIntervalError, clearError, reload } = useRefreshInterval()
   const text = messages[language]
-
-  useEffect(() => {
-    if (!fetchError) return
-    const timeoutId = window.setTimeout(() => setFetchError(''), 3000)
-    return () => window.clearTimeout(timeoutId)
-  }, [fetchError])
 
   useEffect(() => {
     let active = true
@@ -80,6 +77,19 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
       }
     }
 
+    void refreshStatus()
+    const statusInterval = intervalMs === null
+      ? undefined
+      : window.setInterval(() => void refreshStatus(), intervalMs)
+
+    return () => {
+      active = false
+      if (statusInterval !== undefined) window.clearInterval(statusInterval)
+    }
+  }, [pedidoCodigo, intervalMs, text.statusError])
+
+  useEffect(() => {
+    let active = true
     const loadPreparationTimes = async () => {
       try {
         const payload = await apiRequest('/api/productos', null)
@@ -98,17 +108,16 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
       }
     }
 
-    void refreshStatus()
     void loadPreparationTimes()
-    const statusInterval = window.setInterval(() => void refreshStatus(), 30_000)
-    const timerInterval = window.setInterval(() => setNow(Date.now()), 1000)
-
     return () => {
       active = false
-      window.clearInterval(statusInterval)
-      window.clearInterval(timerInterval)
     }
-  }, [pedidoCodigo, text.statusError, text.timerError])
+  }, [text.timerError])
+
+  useEffect(() => {
+    const timerInterval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timerInterval)
+  }, [])
 
   const orderStatus = sale?.pedido_estado?.[language === 'es' ? 'descripcion_es' : 'descripcion_en']
     ?? (sale ? `Estado ${sale.pedido_estado_id}` : '')
@@ -119,11 +128,17 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
 
   return (
     <>
-      {fetchError ? (
-        <div className="storefront-fetch-error" role="alert" aria-live="assertive">
-          <span>{fetchError}</span>
-          <button type="button" onClick={() => setFetchError('')} aria-label={language === 'es' ? 'Cerrar aviso' : 'Dismiss alert'}>×</button>
-        </div>
+      {fetchError || refreshIntervalError ? (
+        <ErrorDialog
+          message={[fetchError, refreshIntervalError].filter(Boolean).join('\n\n')}
+          onClose={() => {
+            setFetchError('')
+            clearError()
+          }}
+          onRetry={refreshIntervalError ? () => void reload() : undefined}
+          retryLabel={refreshIntervalError ? (language === 'es' ? 'Reintentar' : 'Retry') : undefined}
+          closeLabel={language === 'es' ? 'Cerrar aviso' : 'Dismiss alert'}
+        />
       ) : null}
       <aside className="checkout-order-status" aria-live="polite">
         <h2>{text.title}</h2>

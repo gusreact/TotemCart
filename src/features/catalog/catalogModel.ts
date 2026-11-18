@@ -1,4 +1,4 @@
-export type AdminSection = 'categorias' | 'productos' | 'recetas' | 'materias-primas' | 'unidades-medida' | 'roles' | 'pedido-estados' | 'pedidos' | 'usuarios'
+export type AdminSection = 'categorias' | 'productos' | 'recetas' | 'materias-primas' | 'unidades-medida' | 'configuracion' | 'roles' | 'pedido-estados' | 'pedidos' | 'usuarios'
 export type CatalogResource = Exclude<AdminSection, 'usuarios' | 'pedidos'>
 export type Row = Record<string, unknown>
 export type FieldKind = 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'file'
@@ -58,6 +58,7 @@ export const sections: { id: AdminSection; label: string; endpoint?: string }[] 
   { id: 'pedido-estados', label: 'Estado Pedidos', endpoint: '/api/pedido-estados' },
   { id: 'pedidos', label: 'Pedidos' },
   { id: 'usuarios', label: 'Usuarios' },
+  { id: 'configuracion', label: 'Configuración', endpoint: '/api/configuracion' },
 ]
 
 export const fieldDefinitions: Record<CatalogResource, Field[]> = {
@@ -93,6 +94,10 @@ export const fieldDefinitions: Record<CatalogResource, Field[]> = {
   'unidades-medida': [
     { name: 'medida_es', label: 'Medida en español', kind: 'text', required: true },
     { name: 'medida_en', label: 'Medida en inglés', kind: 'text', required: true },
+  ],
+  configuracion: [
+    { name: 'clave', label: 'Clave', kind: 'text', required: true, createOnly: true },
+    { name: 'valor', label: 'Valor', kind: 'text', required: true },
   ],
   roles: [
     { name: 'nombre_es', label: 'Nombre en español', kind: 'text', required: true },
@@ -133,6 +138,10 @@ export const displayFields: Record<CatalogResource, { name: string; label: strin
   'unidades-medida': [
     { name: 'medida_es', label: 'Medida en español' },
     { name: 'medida_en', label: 'Medida en inglés' },
+  ],
+  configuracion: [
+    { name: 'clave', label: 'Clave' },
+    { name: 'valor', label: 'Valor' },
   ],
   roles: [
     { name: 'nombre_es', label: 'Nombre en español' },

@@ -25,6 +25,7 @@ export function useUsers(token?: string | null) {
       setLoading(false)
     }
   }, [token])
+  const clearError = useCallback(() => setError(''), [])
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -82,6 +83,7 @@ export function useUsers(token?: string | null) {
     users,
     loading,
     error,
+    clearError,
     reload: loadUsers,
     createUser,
     updateUser,

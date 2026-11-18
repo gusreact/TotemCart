@@ -3,6 +3,7 @@ import { CatalogManager } from '../features/catalog/CatalogManager'
 import { OrdersManager } from '../features/orders/OrdersManager'
 import { sections, type AdminSection, type Row } from '../features/catalog/catalogModel'
 import { apiRequest, unwrapRows, valueOf } from '../services/apiClient'
+import { ErrorDialog } from './ErrorDialog'
 import { UserManager } from './UserManager'
 
 type AdminWorkspaceProps = {
@@ -30,6 +31,7 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
   const [lowStockMaterials, setLowStockMaterials] = useState<Row[]>([])
   const [inventoryError, setInventoryError] = useState('')
   const [lowStockDialogOpen, setLowStockDialogOpen] = useState(false)
+  const [roleErrorOpen, setRoleErrorOpen] = useState(true)
 
   useEffect(() => {
     if (!isAdministrator) return
@@ -53,6 +55,7 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
     setLowStockMaterials(getLowStockMaterials(rows))
     setInventoryError('')
   }, [])
+  const dismissInventoryError = useCallback(() => setInventoryError(''), [])
 
   return (
     <main className="admin-workspace">
@@ -76,13 +79,15 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
               </svg>
             </button>
           ) : null}
-          {isAdministrator && inventoryError ? <span className="inventory-check-error" role="alert">No se pudo verificar el stock: {inventoryError}</span> : null}
           <div className="account-copy"><strong>{nombre}</strong><span>{username}</span></div>
           <button type="button" className="logout-button" onClick={onLogout}>Cerrar sesión</button>
         </div>
       </header>
       {lowStockDialogOpen && lowStockMaterials.length > 0 ? (
         <LowStockDialog materials={lowStockMaterials} onClose={() => setLowStockDialogOpen(false)} />
+      ) : null}
+      {isAdministrator && inventoryError ? (
+        <ErrorDialog message={inventoryError} onClose={dismissInventoryError} />
       ) : null}
 
       <div className={`admin-layout${navigationCollapsed ? ' navigation-collapsed' : ''}`}>
@@ -118,7 +123,12 @@ export function AdminWorkspace({ token, username, nombre, roleId, onLogout }: Ad
 
         <section className="admin-content" aria-live="polite">
           {visibleSections.length === 0 ? (
-            <p className="error-message" role="alert">No se pudo identificar el rol de este usuario. Cierra sesión e inicia nuevamente.</p>
+            roleErrorOpen ? (
+              <ErrorDialog
+                message="No se pudo identificar el rol de este usuario. Cierra sesión e inicia nuevamente."
+                onClose={() => setRoleErrorOpen(false)}
+              />
+            ) : null
           ) : currentSection === 'pedidos' ? (
             <OrdersManager token={token} isAdministrator={isAdministrator} />
           ) : currentSection === 'usuarios' ? (
@@ -204,6 +214,7 @@ function NavIcon({ section }: { section: AdminSection }) {
     recetas: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5v-12Z" /><path d="M4 6v12a2 2 0 0 1 2-2h14M8 7h8M8 10h8" /></>,
     'materias-primas': <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8" /></>,
     'unidades-medida': <><path d="M4 20h16M6 17V7M10 17v-4M14 17V7M18 17v-4" /><path d="M4 7h16" /></>,
+    configuracion: <><circle cx="12" cy="12" r="3" /><path d="M12 2v2m0 16v2m10-10h-2M4 12H2m17.1-7.1-1.4 1.4M6.3 17.7l-1.4 1.4m14.2 0-1.4-1.4M6.3 6.3 4.9 4.9" /></>,
     roles: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 11l2 2 3.5-4" /></>,
     'pedido-estados': <><path d="M7 3h10l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M17 3v5h4M9 13h8M9 17h5" /></>,
     pedidos: <><path d="M3 5h2l2.2 10.5a2 2 0 0 0 2 1.5h8.9a2 2 0 0 0 1.9-1.4L22 8H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /><path d="M9 11h8" /></>,

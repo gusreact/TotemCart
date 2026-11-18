@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ErrorDialog } from '../../components/ErrorDialog'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { readStoredLanguage, storeLanguage, type Language } from './language'
 
@@ -454,12 +455,6 @@ export default function Storefront() {
           </div>
         ) : loading ? (
           <div className="storefront-message" role="status"><span className="storefront-loader" />{text.loading}</div>
-        ) : error ? (
-          <div className="storefront-message storefront-error" role="alert">
-            <h1>{text.error}</h1>
-            <p>{error}</p>
-            <button type="button" className="storefront-retry" onClick={() => void loadMenu()}>{text.retry}</button>
-          </div>
         ) : selectedCategory ? (
           <div className="product-view">
             <LogoAndLanguage
@@ -548,6 +543,19 @@ export default function Storefront() {
           </div>
         )}
       </section>
+      {error || checkoutError ? (
+        <ErrorDialog
+          title={error ? text.error : undefined}
+          message={[error, checkoutError].filter(Boolean).join('\n\n')}
+          onClose={() => {
+            setError('')
+            setCheckoutError('')
+          }}
+          onRetry={error ? () => void loadMenu() : undefined}
+          retryLabel={error ? text.retry : undefined}
+          closeLabel={text.cancel}
+        />
+      ) : null}
       {language ? (
         <>
           <button
@@ -603,7 +611,6 @@ export default function Storefront() {
                       })}
                     </ul>
                     <footer className="cart-summary"><span>{text.total}</span><strong>{formatPrice(cartTotal)}</strong></footer>
-                    {checkoutError ? <p className="checkout-error" role="alert">{checkoutError}</p> : null}
                     <button type="button" className="checkout-button" onClick={() => void startCheckout()} disabled={checkingOut}>
                       {checkingOut ? text.startingCheckout : text.checkout}
                     </button>

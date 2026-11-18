@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react'
 import { AdminWorkspace } from './AdminWorkspace'
+import { ErrorDialog } from './ErrorDialog'
 import { useAuth } from '../hooks/useAuth'
 
 export default function LoginPage() {
@@ -81,13 +82,12 @@ export default function LoginPage() {
             </div>
           </label>
 
-          {error ? <p className="error-message">{error}</p> : null}
-
           <button type="submit" disabled={loading}>
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
         </form>
       </section>
+      {error ? <ErrorDialog message={error} onClose={() => setError('')} /> : null}
     </main>
   )
 }

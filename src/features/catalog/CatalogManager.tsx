@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { apiRequest, unwrapRows, valueOf } from '../../services/apiClient'
 import { ConfirmationDialog } from '../../components/ConfirmationDialog'
+import { ErrorDialog } from '../../components/ErrorDialog'
 import {
   displayFields,
   fieldDefinitions,
@@ -85,10 +86,10 @@ export function CatalogManager({
       try {
         const [payload, categoryPayload, recipePayload, ingredientPayload, recipeMaterialPayload, unitPayload] = await Promise.all([
           apiRequest(endpoint, token),
-          apiRequest('/api/categorias', token).catch(() => null),
-          apiRequest('/api/recetas', token).catch(() => null),
-          apiRequest('/api/materias-primas', token).catch(() => null),
-          section === 'recetas' ? apiRequest('/api/receta-ingredientes', token).catch(() => null) : Promise.resolve(null),
+          section === 'productos' ? apiRequest('/api/categorias', token) : Promise.resolve(null),
+          section === 'productos' ? apiRequest('/api/recetas', token) : Promise.resolve(null),
+          section === 'recetas' ? apiRequest('/api/materias-primas', token) : Promise.resolve(null),
+          section === 'recetas' ? apiRequest('/api/receta-ingredientes', token) : Promise.resolve(null),
           section === 'materias-primas' ? apiRequest('/api/unidades-medida', token) : Promise.resolve(null),
         ])
         if (!active) return
@@ -247,11 +248,11 @@ export function CatalogManager({
       }
       setPendingAction({
         kind: editing ? 'update' : 'create',
-        path: editing ? `${endpoint}/${editing.id}` : endpoint,
+        path: editing ? getRecordPath(endpoint, section, editing) : endpoint,
         method: editing ? 'PUT' : 'POST',
         body,
-        rowId: editing?.id,
-        label: String(draft.nombre_es ?? draft.nombre ?? draft.nombre_en ?? title.toLowerCase()),
+        rowId: editing ? getRecordKey(section, editing) : undefined,
+        label: String(draft.clave ?? draft.nombre_es ?? draft.nombre ?? draft.nombre_en ?? title.toLowerCase()),
         ...(section === 'recetas' ? {
           recipeMaterials: draftMaterials.map((material) => ({
             id: material.id,
@@ -270,10 +271,10 @@ export function CatalogManager({
     setNotice('')
     setPendingAction({
       kind: 'delete',
-      path: `${endpoint}/${row.id}`,
+      path: getRecordPath(endpoint, section, row),
       method: 'DELETE',
-      rowId: row.id,
-      label: String(row.nombre_es ?? row.nombre ?? row.nombre_en ?? title.toLowerCase()),
+      rowId: getRecordKey(section, row),
+      label: String(row.clave ?? row.nombre_es ?? row.nombre ?? row.nombre_en ?? title.toLowerCase()),
     })
   }
 
@@ -310,7 +311,8 @@ export function CatalogManager({
         })
       }
       const completedAction = pendingAction.kind
-      if (completedAction === 'delete' && editing?.id === pendingAction.rowId) resetForm()
+      if (completedAction === 'delete' && editing &&
+        String(getRecordKey(section, editing)) === String(pendingAction.rowId)) resetForm()
       if (completedAction !== 'delete') resetForm()
       setPendingAction(null)
       setNotice(completedAction === 'create' ? 'Registro creado.' : completedAction === 'update' ? 'Cambios guardados.' : 'Registro eliminado.')
@@ -336,6 +338,7 @@ export function CatalogManager({
 
   return (
     <>
+      {error ? <ErrorDialog message={error} onClose={() => setError('')} /> : null}
       {pendingAction ? (
         <ConfirmationDialog
           message={pendingAction.kind === 'delete'
@@ -413,7 +416,6 @@ export function CatalogManager({
             <div><h2>Cantidad: {rows.length}</h2></div>
             <button className="icon-action refresh-action" type="button" onClick={() => void refresh()} aria-label="Actualizar listado" title="Actualizar">↻</button>
           </div>
-          {error && !editing ? <p className="error-message">{error}</p> : null}
           {loading ? <p className="catalog-state">Cargando registros...</p> : rows.length === 0 ? <p className="catalog-state">Todavía no hay {title.toLowerCase()}.</p> : (
             <div className="catalog-table-wrap">
               <table className="catalog-table">
@@ -424,7 +426,7 @@ export function CatalogManager({
                     : []
                   const isRecipeExpanded = section === 'recetas' && expandedRecipeIds.includes(Number(row.id))
                   return (
-                    <Fragment key={String(row.id)}>
+                    <Fragment key={String(getRecordKey(section, row))}>
                       <tr>
                         {displayFields[section].map((field) => {
                           const unit = field.name === 'unidad_medida_id'
@@ -621,7 +623,6 @@ export function CatalogManager({
                 onRemove={(id) => setDraftMaterials((current) => current.filter((item) => item.id !== id))}
               />
             ) : null}
-            {error ? <p className="error-message">{error}</p> : null}
             {notice ? <p className="success-message">{notice}</p> : null}
             <div className="resource-form-actions">
               <button type="submit" disabled={saving}>{saving ? 'Guardando...' : editing ? 'Guardar cambios' : `Crear ${title}`}</button>
@@ -632,6 +633,15 @@ export function CatalogManager({
       </div>
     </>
   )
+}
+
+function getRecordKey(section: CatalogResource, row: Row) {
+  return section === 'configuracion' ? row.clave : row.id
+}
+
+function getRecordPath(endpoint: string, section: CatalogResource, row: Row) {
+  const key = String(getRecordKey(section, row))
+  return `${endpoint}/${section === 'configuracion' ? encodeURIComponent(key) : key}`
 }
 
 function CatalogResourceDialog({
