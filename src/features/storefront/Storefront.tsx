@@ -242,9 +242,14 @@ export default function Storefront() {
     const product = products.find((item) => item.id === line.product_id)
     return total + (product ? Number(product.precio) * line.quantity : 0)
   }, 0)
-  const customizingIngredients = customizingProduct?.receta_id
+  const customizingIngredients = (customizingProduct?.receta_id
     ? recipeIngredients.find((recipe) => recipe.receta_id === customizingProduct.receta_id)?.materias_primas ?? []
-    : []
+    : []).slice().sort((first, second) => {
+      const firstRequired = first.requerido !== false
+      const secondRequired = second.requerido !== false
+      if (firstRequired === secondRequired) return 0
+      return firstRequired ? -1 : 1
+    })
 
   const updateLanguage = (nextLanguage: Language) => {
     storeLanguage(nextLanguage)
