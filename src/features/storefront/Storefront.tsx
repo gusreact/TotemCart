@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorDialog } from '../../components/ErrorDialog'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
+import { CHECKOUT_SALE_STORAGE_PREFIX } from '../orders/orderStorage'
 import { readStoredLanguage, storeLanguage, type Language } from './language'
 
 type StoreCategory = {
@@ -45,7 +46,84 @@ type CartLine = {
   quantity: number
   materia_prima_ids: number[]
 }
+type StoredPedidoItem = {
+  id?: number
+  product_id?: number
+  product_name?: string
+  quantity?: number
+  unit_price?: string | number
+}
+type StoredPedido = {
+  id?: number
+  pedido_codigo?: string | null
+  pedido_estado_id?: number
+  pedido_estado?: {
+    descripcion_es?: string | null
+    descripcion_en?: string | null
+  } | null
+  total?: string | number
+  payment_status?: string
+  items?: StoredPedidoItem[]
+}
+type StoredPedidoEntry = {
+  storageKey: string
+  pedido: StoredPedido
+}
 const CART_STORAGE_KEY = 'totemcart-checkout-cart'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isOptionalText(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'string'
+}
+
+function isStoredPedido(value: unknown): value is StoredPedido {
+  if (!isRecord(value)) return false
+  if (!isOptionalText(value.pedido_codigo) || !isOptionalText(value.payment_status)) return false
+  if (value.total !== undefined && typeof value.total !== 'string' && typeof value.total !== 'number') return false
+  if (value.pedido_estado_id !== undefined && typeof value.pedido_estado_id !== 'number') return false
+  if (value.pedido_estado !== undefined && value.pedido_estado !== null) {
+    if (!isRecord(value.pedido_estado) ||
+      !isOptionalText(value.pedido_estado.descripcion_es) ||
+      !isOptionalText(value.pedido_estado.descripcion_en)) return false
+  }
+  if (value.items !== undefined && (!Array.isArray(value.items) || !value.items.every((item) => (
+    isRecord(item) &&
+    isOptionalText(item.product_name) &&
+    (item.product_id === undefined || typeof item.product_id === 'number') &&
+    (item.quantity === undefined || typeof item.quantity === 'number')
+  )))) return false
+  return true
+}
+
+function savedPedidoCode(entry: StoredPedidoEntry): string {
+  if (entry.pedido.pedido_codigo) return entry.pedido.pedido_codigo
+  const savedCode = entry.storageKey.slice(CHECKOUT_SALE_STORAGE_PREFIX.length)
+  try {
+    return decodeURIComponent(savedCode)
+  } catch {
+    return savedCode
+  }
+}
+
+function readStoredPedidos(): StoredPedidoEntry[] {
+  const entries: StoredPedidoEntry[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const storageKey = window.localStorage.key(index)
+    if (!storageKey?.startsWith(CHECKOUT_SALE_STORAGE_PREFIX)) continue
+    const serializedPedido = window.localStorage.getItem(storageKey)
+    if (!serializedPedido) continue
+    try {
+      const pedido: unknown = JSON.parse(serializedPedido)
+      if (isStoredPedido(pedido)) entries.push({ storageKey, pedido })
+    } catch {
+      continue
+    }
+  }
+  return entries
+}
 
 function readStoredCart(): CartLine[] {
   const storedCart = sessionStorage.getItem(CART_STORAGE_KEY)
@@ -105,6 +183,13 @@ const copy = {
     customDescription: 'Elige qué ingredientes opcionales incluir.',
     required: 'Requerido',
     optional: 'Opcional',
+    orderBag: 'Ver pedidos guardados',
+    orderTitle: 'Información del pedido',
+    orderStatus: 'Estado',
+    orderPaymentStatus: 'Estado del pago',
+    orderTotal: 'Total',
+    orderEmpty: 'Este pedido no tiene productos disponibles para mostrar.',
+    closeOrder: 'Cerrar información del pedido',
     addConfigured: 'Agregar al carrito',
     cancel: 'Cancelar',
     checkout: 'Pagar con Mercado Pago',
@@ -143,6 +228,13 @@ const copy = {
     customDescription: 'Choose which optional ingredients to include.',
     required: 'Required',
     optional: 'Optional',
+    orderBag: 'View saved orders',
+    orderTitle: 'Order details',
+    orderStatus: 'Status',
+    orderPaymentStatus: 'Payment status',
+    orderTotal: 'Total',
+    orderEmpty: 'No product details are available for this order.',
+    closeOrder: 'Close order details',
     addConfigured: 'Add to cart',
     cancel: 'Cancel',
     checkout: 'Pay with Mercado Pago',
@@ -178,6 +270,8 @@ export default function Storefront() {
   const [flippedProductIds, setFlippedProductIds] = useState<number[]>([])
   const [cartLines, setCartLines] = useState<CartLine[]>(readStoredCart)
   const [cartOpen, setCartOpen] = useState(false)
+  const [savedPedidos, setSavedPedidos] = useState<StoredPedidoEntry[]>(readStoredPedidos)
+  const [pedidoOpen, setPedidoOpen] = useState(false)
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null)
   const [checkoutError, setCheckoutError] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
@@ -263,6 +357,16 @@ export default function Storefront() {
       sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartLines))
     }
   }, [cartLines])
+
+  useEffect(() => {
+    const syncSavedPedidos = () => setSavedPedidos(readStoredPedidos())
+    window.addEventListener('storage', syncSavedPedidos)
+    window.addEventListener('pageshow', syncSavedPedidos)
+    return () => {
+      window.removeEventListener('storage', syncSavedPedidos)
+      window.removeEventListener('pageshow', syncSavedPedidos)
+    }
+  }, [])
 
   useEffect(() => {
     const handlePageShow = () => setCheckingOut(false)
@@ -563,22 +667,40 @@ export default function Storefront() {
       ) : null}
       {language ? (
         <>
-          <button
-            ref={cartButtonRef}
-            type="button"
-            className={`store-cart-button${cartOpen ? ' is-open' : ''}`}
-            onClick={() => setCartOpen(true)}
-            aria-label={`${text.cart}: ${cartCount}`}
-            aria-haspopup="dialog"
-            aria-expanded={cartOpen}
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 4h2l2.3 11.2a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 9H6" />
-              <circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" />
-            </svg>
-            <span>{text.cart}</span>
-            <strong className="store-cart-count" aria-live="polite">{cartCount}</strong>
-          </button>
+          <div className="store-floating-actions">
+            {savedPedidos.length > 0 ? (
+              <button
+                type="button"
+                className={`store-order-button${pedidoOpen ? ' is-open' : ''}`}
+                onClick={() => setPedidoOpen(true)}
+                aria-label={text.orderBag}
+                title={text.orderBag}
+                aria-haspopup="dialog"
+                aria-expanded={pedidoOpen}
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 8h14l1.2 12H3.8L5 8Z" />
+                  <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+                </svg>
+              </button>
+            ) : null}
+            <button
+              ref={cartButtonRef}
+              type="button"
+              className={`store-cart-button${cartOpen ? ' is-open' : ''}`}
+              onClick={() => setCartOpen(true)}
+              aria-label={`${text.cart}: ${cartCount}`}
+              aria-haspopup="dialog"
+              aria-expanded={cartOpen}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 4h2l2.3 11.2a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 9H6" />
+                <circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" />
+              </svg>
+              <span>{text.cart}</span>
+              <strong className="store-cart-count" aria-live="polite">{cartCount}</strong>
+            </button>
+          </div>
           {cartOpen ? (
             <div className="cart-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setCartOpen(false) }}>
               <section className="cart-dialog" role="dialog" aria-modal="true" aria-labelledby="cart-dialog-title" aria-busy={checkingOut}>
@@ -621,6 +743,52 @@ export default function Storefront() {
                     </button>
                   </>
                 ) : <p className="cart-empty">{text.emptyCart}</p>}
+              </section>
+            </div>
+          ) : null}
+          {pedidoOpen ? (
+            <div className="cart-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setPedidoOpen(false) }}>
+              <section
+                className="cart-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="saved-pedido-title"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setPedidoOpen(false)
+                }}
+                tabIndex={-1}
+              >
+                <header className="cart-dialog-header">
+                  <div><p className="storefront-kicker">{text.orderTitle}</p><h2 id="saved-pedido-title">{text.orderTitle}</h2></div>
+                  <button type="button" className="cart-close-button" onClick={() => setPedidoOpen(false)} aria-label={text.closeOrder}>×</button>
+                </header>
+                <div className="saved-pedido-list">
+                  {savedPedidos.map(({ storageKey, pedido }) => {
+                    const orderCode = savedPedidoCode({ storageKey, pedido })
+                    const orderStatus = pedido.pedido_estado?.[language === 'es' ? 'descripcion_es' : 'descripcion_en']
+                      ?? (pedido.pedido_estado_id ? `Estado ${pedido.pedido_estado_id}` : null)
+                    return (
+                      <article className="saved-pedido" key={storageKey}>
+                        <h3>{orderCode}</h3>
+                        {orderStatus ? <p><span>{text.orderStatus}</span><strong>{orderStatus}</strong></p> : null}
+                        {pedido.payment_status ? <p><span>{text.orderPaymentStatus}</span><strong>{pedido.payment_status}</strong></p> : null}
+                        {Array.isArray(pedido.items) && pedido.items.length > 0 ? (
+                          <ul>
+                            {pedido.items.map((item, index) => (
+                              <li key={item.id ?? index}>
+                                <span>{item.product_name ?? `Producto ${item.product_id ?? ''}`}</span>
+                                {item.quantity ? <strong>× {item.quantity}</strong> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : <p>{text.orderEmpty}</p>}
+                        {pedido.total !== undefined && pedido.total !== null && Number.isFinite(Number(pedido.total)) ? (
+                          <p><span>{text.orderTotal}</span><strong>{formatPrice(Number(pedido.total))}</strong></p>
+                        ) : null}
+                      </article>
+                    )
+                  })}
+                </div>
               </section>
             </div>
           ) : null}

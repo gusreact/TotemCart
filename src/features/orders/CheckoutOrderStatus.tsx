@@ -3,6 +3,7 @@ import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { ErrorDialog } from '../../components/ErrorDialog'
 import { useRefreshInterval } from '../../hooks/useRefreshInterval'
 import type { Language } from '../storefront/language'
+import { CHECKOUT_SALE_STORAGE_PREFIX } from './orderStorage'
 import { formatDuration, getMaxPreparationMinutes, getRemainingPreparationSeconds } from './orderTimer'
 
 type CheckoutSaleByCode = {
@@ -64,6 +65,14 @@ export function CheckoutOrderStatus({ pedidoCodigo, language }: {
           null,
         )
         if (active) {
+          const serializedSale = JSON.stringify(payload)
+          if (serializedSale === undefined) {
+            throw new Error('No se pudo guardar la información del pedido.')
+          }
+          window.localStorage.setItem(
+            `${CHECKOUT_SALE_STORAGE_PREFIX}${encodeURIComponent(pedidoCodigo)}`,
+            serializedSale,
+          )
           setSale(payload as CheckoutSaleByCode)
           setFetchError('')
         }
