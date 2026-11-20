@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorDialog } from '../../components/ErrorDialog'
+import { useRefreshInterval } from '../../hooks/useRefreshInterval'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { CHECKOUT_SALE_STORAGE_PREFIX } from '../orders/orderStorage'
 import { readStoredLanguage, storeLanguage, type Language } from './language'
@@ -125,6 +126,18 @@ function readStoredPedidos(): StoredPedidoEntry[] {
   return entries
 }
 
+function removeStoredPedidoKeys(): void {
+  const legacyStorageKey = CHECKOUT_SALE_STORAGE_PREFIX.slice(0, -1)
+  const keysToRemove: string[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (key === legacyStorageKey || key?.startsWith(CHECKOUT_SALE_STORAGE_PREFIX)) {
+      if (key) keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach((key) => window.localStorage.removeItem(key))
+}
+
 function readStoredCart(): CartLine[] {
   const storedCart = sessionStorage.getItem(CART_STORAGE_KEY)
   if (!storedCart) return []
@@ -187,6 +200,7 @@ const copy = {
     orderTitle: 'Información del pedido',
     orderStatus: 'Estado',
     orderPaymentStatus: 'Estado del pago',
+    orderStatusRefreshError: 'No se pudo actualizar el estado de uno o más pedidos.',
     orderTotal: 'Total',
     orderEmpty: 'Este pedido no tiene productos disponibles para mostrar.',
     closeOrder: 'Cerrar información del pedido',
@@ -232,6 +246,7 @@ const copy = {
     orderTitle: 'Order details',
     orderStatus: 'Status',
     orderPaymentStatus: 'Payment status',
+    orderStatusRefreshError: 'Could not refresh the status of one or more orders.',
     orderTotal: 'Total',
     orderEmpty: 'No product details are available for this order.',
     closeOrder: 'Close order details',
@@ -272,13 +287,22 @@ export default function Storefront() {
   const [cartOpen, setCartOpen] = useState(false)
   const [savedPedidos, setSavedPedidos] = useState<StoredPedidoEntry[]>(readStoredPedidos)
   const [pedidoOpen, setPedidoOpen] = useState(false)
+  const [savedPedidoRefreshError, setSavedPedidoRefreshError] = useState('')
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null)
   const [checkoutError, setCheckoutError] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
   const [customizingProduct, setCustomizingProduct] = useState<StoreProduct | null>(null)
   const [selectedMateriaPrimaIds, setSelectedMateriaPrimaIds] = useState<number[]>([])
+  const savedPedidosRef = useRef(savedPedidos)
+  const isRefreshingSavedPedidosRef = useRef(false)
   const customizationSourceRef = useRef<HTMLButtonElement | null>(null)
   const cartButtonRef = useRef<HTMLButtonElement>(null)
+  const {
+    intervalMs: savedPedidoRefreshInterval,
+    error: savedPedidoRefreshIntervalError,
+    clearError: clearSavedPedidoRefreshIntervalError,
+    reload: reloadSavedPedidoRefreshInterval,
+  } = useRefreshInterval()
 
   const reconcileCartProducts = (menuProducts: StoreProduct[]) => {
     const productIds = new Set(menuProducts.map((product) => product.id))
@@ -359,6 +383,10 @@ export default function Storefront() {
   }, [cartLines])
 
   useEffect(() => {
+    savedPedidosRef.current = savedPedidos
+  }, [savedPedidos])
+
+  useEffect(() => {
     const syncSavedPedidos = () => setSavedPedidos(readStoredPedidos())
     window.addEventListener('storage', syncSavedPedidos)
     window.addEventListener('pageshow', syncSavedPedidos)
@@ -373,6 +401,64 @@ export default function Storefront() {
     window.addEventListener('pageshow', handlePageShow)
     return () => window.removeEventListener('pageshow', handlePageShow)
   }, [])
+
+  const refreshSavedPedidoStatuses = useCallback(async () => {
+    if (isRefreshingSavedPedidosRef.current || savedPedidosRef.current.length === 0) return
+    isRefreshingSavedPedidosRef.current = true
+    try {
+      const results = await Promise.all(savedPedidosRef.current.map(async (entry) => {
+        const pedidoCodigo = savedPedidoCode(entry)
+        try {
+          const payload: unknown = await apiRequest(
+            `/api/payments/sales/by-code/${encodeURIComponent(pedidoCodigo)}`,
+            null,
+          )
+          if (!isStoredPedido(payload)) {
+            throw new Error('El servidor devolvió información de pedido inválida.')
+          }
+          if (payload.pedido_estado_id === 4 || payload.pedido_estado_id === 5) {
+            window.localStorage.removeItem(entry.storageKey)
+            return { entry: null, error: '' }
+          }
+          const serializedPedido = JSON.stringify(payload)
+          if (serializedPedido === undefined) {
+            throw new Error('No se pudo guardar la información del pedido.')
+          }
+          window.localStorage.setItem(entry.storageKey, serializedPedido)
+          return { entry: { ...entry, pedido: payload }, error: '' }
+        } catch (refreshError) {
+          const message = refreshError instanceof Error
+            ? refreshError.message
+            : text.orderStatusRefreshError
+          return { entry, error: `${pedidoCodigo}: ${message}` }
+        }
+      }))
+      const refreshedPedidos = results.flatMap((result) => result.entry ? [result.entry] : [])
+      if (refreshedPedidos.length === 0) {
+        removeStoredPedidoKeys()
+        setPedidoOpen(false)
+      }
+      savedPedidosRef.current = refreshedPedidos
+      setSavedPedidos(refreshedPedidos)
+      setSavedPedidoRefreshError(results
+        .map((result) => result.error)
+        .filter(Boolean)
+        .join('\n'))
+    } finally {
+      isRefreshingSavedPedidosRef.current = false
+    }
+  }, [text.orderStatusRefreshError])
+
+  useEffect(() => {
+    if (!pedidoOpen) return
+    void refreshSavedPedidoStatuses()
+    if (savedPedidoRefreshInterval === null) return
+    const statusInterval = window.setInterval(
+      () => void refreshSavedPedidoStatuses(),
+      savedPedidoRefreshInterval,
+    )
+    return () => window.clearInterval(statusInterval)
+  }, [pedidoOpen, refreshSavedPedidoStatuses, savedPedidoRefreshInterval])
 
   const startCheckout = async () => {
     if (checkingOut || cartLines.length === 0) return
@@ -652,16 +738,29 @@ export default function Storefront() {
           </div>
         )}
       </section>
-      {error || checkoutError ? (
+      {error || checkoutError || (pedidoOpen && (savedPedidoRefreshError || savedPedidoRefreshIntervalError)) ? (
         <ErrorDialog
           title={error ? text.error : undefined}
-          message={[error, checkoutError].filter(Boolean).join('\n\n')}
+          message={[
+            error,
+            checkoutError,
+            pedidoOpen ? savedPedidoRefreshError : '',
+            pedidoOpen ? savedPedidoRefreshIntervalError : '',
+          ].filter(Boolean).join('\n\n')}
           onClose={() => {
             setError('')
             setCheckoutError('')
+            setSavedPedidoRefreshError('')
+            clearSavedPedidoRefreshIntervalError()
           }}
-          onRetry={error ? () => void loadMenu() : undefined}
-          retryLabel={error ? text.retry : undefined}
+          onRetry={error
+            ? () => void loadMenu()
+            : savedPedidoRefreshIntervalError
+              ? () => void reloadSavedPedidoRefreshInterval()
+              : savedPedidoRefreshError
+                ? () => void refreshSavedPedidoStatuses()
+                : undefined}
+          retryLabel={error || savedPedidoRefreshError || savedPedidoRefreshIntervalError ? text.retry : undefined}
           closeLabel={text.cancel}
         />
       ) : null}
