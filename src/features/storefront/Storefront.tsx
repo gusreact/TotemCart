@@ -4,6 +4,7 @@ import { ErrorDialog } from '../../components/ErrorDialog'
 import { useRefreshInterval } from '../../hooks/useRefreshInterval'
 import { apiRequest, unwrapRows } from '../../services/apiClient'
 import { CHECKOUT_SALE_STORAGE_PREFIX } from '../orders/orderStorage'
+import { formatDuration, getMaxPreparationMinutes, getRemainingPreparationSeconds } from '../orders/orderTimer'
 import { readStoredLanguage, storeLanguage, type Language } from './language'
 
 type StoreCategory = {
@@ -62,6 +63,7 @@ type StoredPedido = {
     descripcion_es?: string | null
     descripcion_en?: string | null
   } | null
+  preparation_at?: string | null
   total?: string | number
   payment_status?: string
   items?: StoredPedidoItem[]
@@ -83,6 +85,7 @@ function isOptionalText(value: unknown): boolean {
 function isStoredPedido(value: unknown): value is StoredPedido {
   if (!isRecord(value)) return false
   if (!isOptionalText(value.pedido_codigo) || !isOptionalText(value.payment_status)) return false
+  if (!isOptionalText(value.preparation_at)) return false
   if (value.total !== undefined && typeof value.total !== 'string' && typeof value.total !== 'number') return false
   if (value.pedido_estado_id !== undefined && typeof value.pedido_estado_id !== 'number') return false
   if (value.pedido_estado !== undefined && value.pedido_estado !== null) {
@@ -199,6 +202,7 @@ const copy = {
     orderBag: 'Ver pedidos guardados',
     orderTitle: 'Información del pedido',
     orderStatus: 'Estado',
+    preparationTime: 'Tiempo de preparación',
     orderPaymentStatus: 'Estado del pago',
     orderStatusRefreshError: 'No se pudo actualizar el estado de uno o más pedidos.',
     orderTotal: 'Total',
@@ -245,6 +249,7 @@ const copy = {
     orderBag: 'View saved orders',
     orderTitle: 'Order details',
     orderStatus: 'Status',
+    preparationTime: 'Preparation time',
     orderPaymentStatus: 'Payment status',
     orderStatusRefreshError: 'Could not refresh the status of one or more orders.',
     orderTotal: 'Total',
@@ -287,6 +292,7 @@ export default function Storefront() {
   const [cartOpen, setCartOpen] = useState(false)
   const [savedPedidos, setSavedPedidos] = useState<StoredPedidoEntry[]>(readStoredPedidos)
   const [pedidoOpen, setPedidoOpen] = useState(false)
+  const [pedidoTimerNow, setPedidoTimerNow] = useState<number | null>(null)
   const [savedPedidoRefreshError, setSavedPedidoRefreshError] = useState('')
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null)
   const [checkoutError, setCheckoutError] = useState('')
@@ -360,6 +366,14 @@ export default function Storefront() {
     const product = products.find((item) => item.id === line.product_id)
     return total + (product ? Number(product.precio) * line.quantity : 0)
   }, 0)
+  const preparationTimes = new Map<number, number>()
+  products.forEach((product) => {
+    const minutes = Number(product.tiempo_preparacion)
+    if (product.tiempo_preparacion !== null && product.tiempo_preparacion !== undefined &&
+      product.tiempo_preparacion !== '' && Number.isFinite(minutes) && minutes > 0) {
+      preparationTimes.set(product.id, minutes)
+    }
+  })
   const customizingIngredients = (customizingProduct?.receta_id
     ? recipeIngredients.find((recipe) => recipe.receta_id === customizingProduct.receta_id)?.materias_primas ?? []
     : []).slice().sort((first, second) => {
@@ -459,6 +473,14 @@ export default function Storefront() {
     )
     return () => window.clearInterval(statusInterval)
   }, [pedidoOpen, refreshSavedPedidoStatuses, savedPedidoRefreshInterval])
+
+  useEffect(() => {
+    if (!pedidoOpen) {
+      return
+    }
+    const timerInterval = window.setInterval(() => setPedidoTimerNow(Date.now()), 1000)
+    return () => window.clearInterval(timerInterval)
+  }, [pedidoOpen])
 
   const startCheckout = async () => {
     if (checkingOut || cartLines.length === 0) return
@@ -771,7 +793,10 @@ export default function Storefront() {
               <button
                 type="button"
                 className={`store-order-button${pedidoOpen ? ' is-open' : ''}`}
-                onClick={() => setPedidoOpen(true)}
+                onClick={() => {
+                  setPedidoTimerNow(Date.now())
+                  setPedidoOpen(true)
+                }}
                 aria-label={text.orderBag}
                 title={text.orderBag}
                 aria-haspopup="dialog"
@@ -866,10 +891,27 @@ export default function Storefront() {
                     const orderCode = savedPedidoCode({ storageKey, pedido })
                     const orderStatus = pedido.pedido_estado?.[language === 'es' ? 'descripcion_es' : 'descripcion_en']
                       ?? (pedido.pedido_estado_id ? `Estado ${pedido.pedido_estado_id}` : null)
+                    const maxPreparationMinutes = getMaxPreparationMinutes(
+                      (pedido.items ?? []).flatMap((item) => typeof item.product_id === 'number'
+                        ? [{ product_id: item.product_id }]
+                        : []),
+                      preparationTimes,
+                    )
+                    const remainingSeconds = pedido.pedido_estado_id === 2 && pedidoTimerNow !== null
+                      ? getRemainingPreparationSeconds(pedido.preparation_at, maxPreparationMinutes, pedidoTimerNow)
+                      : null
                     return (
                       <article className="saved-pedido" key={storageKey}>
                         <h3>{orderCode}</h3>
                         {orderStatus ? <p><span>{text.orderStatus}</span><strong>{orderStatus}</strong></p> : null}
+                        {remainingSeconds !== null ? (
+                          <div className="checkout-preparation-timer">
+                            <span>{text.preparationTime}</span>
+                            <time className={`order-timer${remainingSeconds === 0 ? ' is-finished' : ''}`} aria-label={text.preparationTime}>
+                              {formatDuration(remainingSeconds)}
+                            </time>
+                          </div>
+                        ) : null}
                         {pedido.payment_status ? <p><span>{text.orderPaymentStatus}</span><strong>{pedido.payment_status}</strong></p> : null}
                         {Array.isArray(pedido.items) && pedido.items.length > 0 ? (
                           <ul>
